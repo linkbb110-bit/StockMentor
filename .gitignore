@@ -1,0 +1,32 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+**/application-local.yml
+**/application-prod.yml
+
+# Java and Maven
+**/target/
+*.class
+*.log
+
+# Node and Vite
+**/node_modules/
+**/dist/
+**/.vite/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.project
+.classpath
+.settings/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test and coverage
+coverage/
+*.exec
