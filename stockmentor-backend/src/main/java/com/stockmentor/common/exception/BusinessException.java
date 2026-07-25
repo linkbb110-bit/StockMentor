@@ -3,34 +3,45 @@ package com.stockmentor.common.exception;
 import java.util.Objects;
 
 public class BusinessException extends RuntimeException {
-    private static final String SAFE_CLIENT_MESSAGE_PATTERN =
-            "[\\p{IsHan}0-9 ，。！？：；（）《》【】、-]{1,100}";
-
     private final ErrorCode errorCode;
 
     public BusinessException(ErrorCode errorCode) {
         super(defaultMessage(errorCode));
-        this.errorCode = errorCode;
+        this.errorCode = requiredErrorCode(errorCode);
     }
 
-    public BusinessException(ErrorCode errorCode, String safeMessage) {
-        super(resolveClientMessage(errorCode, safeMessage));
-        this.errorCode = errorCode;
+    public BusinessException(ErrorCode errorCode, ClientMessage clientMessage) {
+        super(clientMessageValue(clientMessage));
+        this.errorCode = requiredErrorCode(errorCode);
     }
 
     public ErrorCode getErrorCode() {
         return errorCode;
     }
 
-    private static String resolveClientMessage(ErrorCode errorCode, String candidateMessage) {
-        String defaultMessage = defaultMessage(errorCode);
-        if (candidateMessage == null || !candidateMessage.matches(SAFE_CLIENT_MESSAGE_PATTERN)) {
-            return defaultMessage;
-        }
-        return candidateMessage;
+    private static String defaultMessage(ErrorCode errorCode) {
+        return requiredErrorCode(errorCode).message();
     }
 
-    private static String defaultMessage(ErrorCode errorCode) {
-        return Objects.requireNonNull(errorCode, "errorCode must not be null").message();
+    private static String clientMessageValue(ClientMessage clientMessage) {
+        return Objects.requireNonNull(clientMessage, "clientMessage must not be null").value();
+    }
+
+    private static ErrorCode requiredErrorCode(ErrorCode errorCode) {
+        return Objects.requireNonNull(errorCode, "errorCode must not be null");
+    }
+
+    public enum ClientMessage {
+        REQUEST_REJECTED("当前请求无法处理");
+
+        private final String value;
+
+        ClientMessage(String value) {
+            this.value = value;
+        }
+
+        public String value() {
+            return value;
+        }
     }
 }

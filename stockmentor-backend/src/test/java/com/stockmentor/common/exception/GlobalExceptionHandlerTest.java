@@ -54,10 +54,18 @@ class GlobalExceptionHandlerTest {
 
     @Test
     void businessExceptionCanUseAnExplicitSafeMessage() {
-        BusinessException exception = new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "课程不存在");
+        BusinessException exception = new BusinessException(
+                ErrorCode.RESOURCE_NOT_FOUND, BusinessException.ClientMessage.REQUEST_REJECTED);
 
         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.RESOURCE_NOT_FOUND);
-        assertThat(exception).hasMessage("课程不存在");
+        assertThat(exception).hasMessage("当前请求无法处理");
+    }
+
+    @Test
+    void businessExceptionPublicConstructorsDoNotAcceptRawClientMessageTypes() {
+        assertThat(BusinessException.class.getConstructors())
+                .allSatisfy(constructor -> assertThat(constructor.getParameterTypes())
+                        .doesNotContain(String.class, Throwable.class));
     }
 
     @Test
@@ -70,20 +78,11 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
-    void unsafeBusinessExceptionMessageFallsBackToTheErrorCodeMessage() throws Exception {
-        mockMvc.perform(get("/unsafe-business"))
+    void controlledBusinessExceptionMessageProducesItsHttpStatusAndApiResponse() throws Exception {
+        mockMvc.perform(get("/safe-business"))
                 .andExpect(status().isNotFound())
                 .andExpect(content().json("""
-                        {"code":"RESOURCE_NOT_FOUND","message":"资源不存在","data":null}
-                        """));
-    }
-
-    @Test
-    void databaseBusinessExceptionMessageFallsBackToTheErrorCodeMessage() throws Exception {
-        mockMvc.perform(get("/unsafe-database-business"))
-                .andExpect(status().isNotFound())
-                .andExpect(content().json("""
-                        {"code":"RESOURCE_NOT_FOUND","message":"资源不存在","data":null}
+                        {"code":"RESOURCE_NOT_FOUND","message":"当前请求无法处理","data":null}
                         """));
     }
 
@@ -143,16 +142,10 @@ class GlobalExceptionHandlerTest {
             throw new BusinessException(ErrorCode.CONFLICT);
         }
 
-        @GetMapping("/unsafe-business")
-        void unsafeBusiness() {
-            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND,
-                    "java.sql.SQLException: access denied\n\tat com.mysql.cj.jdbc.ClientPreparedStatement.execute");
-        }
-
-        @GetMapping("/unsafe-database-business")
-        void unsafeDatabaseBusiness() {
-            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND,
-                    "Duplicate entry 'alice@example.com' for key 'sys_user.email'");
+        @GetMapping("/safe-business")
+        void safeBusiness() {
+            throw new BusinessException(
+                    ErrorCode.RESOURCE_NOT_FOUND, BusinessException.ClientMessage.REQUEST_REJECTED);
         }
 
         @PostMapping("/validated")
