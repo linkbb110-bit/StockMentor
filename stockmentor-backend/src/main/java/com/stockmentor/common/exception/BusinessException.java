@@ -1,10 +1,10 @@
 package com.stockmentor.common.exception;
 
-import java.util.Locale;
 import java.util.Objects;
 
 public class BusinessException extends RuntimeException {
-    private static final int MAX_SAFE_MESSAGE_LENGTH = 200;
+    private static final String SAFE_CLIENT_MESSAGE_PATTERN =
+            "[\\p{IsHan}0-9 ，。！？：；（）《》【】、-]{1,100}";
 
     private final ErrorCode errorCode;
 
@@ -24,17 +24,7 @@ public class BusinessException extends RuntimeException {
 
     private static String resolveClientMessage(ErrorCode errorCode, String candidateMessage) {
         String defaultMessage = defaultMessage(errorCode);
-        if (candidateMessage == null || candidateMessage.isBlank()
-                || candidateMessage.length() > MAX_SAFE_MESSAGE_LENGTH
-                || candidateMessage.chars().anyMatch(Character::isISOControl)) {
-            return defaultMessage;
-        }
-
-        String normalizedMessage = candidateMessage.toLowerCase(Locale.ROOT);
-        if (normalizedMessage.contains("exception")
-                || normalizedMessage.contains("jdbc")
-                || normalizedMessage.contains("java.sql")
-                || normalizedMessage.matches(".*\\bsql\\b.*")) {
+        if (candidateMessage == null || !candidateMessage.matches(SAFE_CLIENT_MESSAGE_PATTERN)) {
             return defaultMessage;
         }
         return candidateMessage;
