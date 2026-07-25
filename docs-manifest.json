@@ -1,0 +1,21 @@
+{
+  "project": "StockMentor",
+  "package_version": "docs-v0.1",
+  "generated_date": "2026-07-25",
+  "file_count": 42,
+  "main_spec": "docs/superpowers/specs/2026-07-25-stockmentor-design.md",
+  "implementation_plan": "docs/superpowers/plans/2026-07-25-stockmentor-v0.1-foundation.md",
+  "codex_prompt": "docs/06-development/codex-v0.1-prompt.md",
+  "learning_notes": [
+    "architecture.md",
+    "database-design.md",
+    "jwt-authentication.md",
+    "spring-security-flow.md",
+    "quiz-scoring.md",
+    "ai-tutor-design.md",
+    "virtual-portfolio.md",
+    "transaction-design.md",
+    "common-bugs.md",
+    "interview-questions.md"
+  ]
+}
