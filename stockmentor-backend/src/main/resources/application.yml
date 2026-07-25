@@ -7,6 +7,12 @@ spring:
   flyway:
     enabled: ${FLYWAY_ENABLED:false}
 
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
 stockmentor:
   redis:
     enabled: ${REDIS_ENABLED:false}
