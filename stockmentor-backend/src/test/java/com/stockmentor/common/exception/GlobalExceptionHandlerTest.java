@@ -70,6 +70,15 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void unsafeBusinessExceptionMessageFallsBackToTheErrorCodeMessage() throws Exception {
+        mockMvc.perform(get("/unsafe-business"))
+                .andExpect(status().isNotFound())
+                .andExpect(content().json("""
+                        {"code":"RESOURCE_NOT_FOUND","message":"资源不存在","data":null}
+                        """));
+    }
+
+    @Test
     void invalidRequestBodyProducesValidationFailedApiResponse() throws Exception {
         mockMvc.perform(post("/validated")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -123,6 +132,12 @@ class GlobalExceptionHandlerTest {
         @GetMapping("/business")
         void business() {
             throw new BusinessException(ErrorCode.CONFLICT);
+        }
+
+        @GetMapping("/unsafe-business")
+        void unsafeBusiness() {
+            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND,
+                    "java.sql.SQLException: access denied\n\tat com.mysql.cj.jdbc.ClientPreparedStatement.execute");
         }
 
         @PostMapping("/validated")
