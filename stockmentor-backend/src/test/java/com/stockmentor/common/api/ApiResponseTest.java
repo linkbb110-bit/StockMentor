@@ -16,6 +16,15 @@ class ApiResponseTest {
     }
 
     @Test
+    void successWithCustomMessageShouldContainProvidedMessageAndData() {
+        ApiResponse<Integer> response = ApiResponse.success("已保存", 42);
+
+        assertThat(response.code()).isEqualTo("SUCCESS");
+        assertThat(response.message()).isEqualTo("已保存");
+        assertThat(response.data()).isEqualTo(42);
+    }
+
+    @Test
     void failureShouldContainProvidedErrorAndNullData() {
         ApiResponse<Void> response =
             ApiResponse.failure("VALIDATION_FAILED", "请求参数不合法");
