@@ -17,6 +17,7 @@
 - JWT 只允许包含 `sub`、`iat`、`exp`、`jti`。
 - JWT 默认有效期为 7200 秒。
 - `JWT_SECRET` 必须来自环境变量；缺失或不足 32 字节时应用启动失败。
+- 后端 CORS 必须使用 `CORS_ALLOWED_ORIGINS` 环境变量驱动的显式白名单，禁止通配来源。
 - 邮箱注册和登录前必须去除首尾空格并转换为小写。
 - 密码为 8–64 字符，至少包含一个英文字母和一个数字，不得自动 `trim()`。
 - 昵称去除首尾空格后必须为 2–20 字符，只允许中文、英文字母、数字、空格、下划线和短横线。
@@ -64,13 +65,14 @@
   - 增加 `spring-security-oauth2-jose`
   - 增加测试期望所需依赖时保持最小化
 - Modify: `stockmentor-backend/src/main/resources/application.yml`
-  - 增加 JWT 配置
+  - 增加 JWT 和 CORS 白名单配置
   - 保持 Redis 和 AI 可选
 - Modify: `.env.example`
-  - 保留不可用的 JWT 示例值
+  - 保留不可用的 JWT 示例值和本地 CORS 来源示例
 - Modify: `stockmentor-backend/src/main/resources/application-local.yml.example`
-  - 展示从环境变量读取 JWT 配置
+  - 展示从环境变量读取 JWT 和 CORS 配置
 - Create: `stockmentor-backend/src/main/java/com/stockmentor/infrastructure/security/JwtProperties.java`
+- Create: `stockmentor-backend/src/main/java/com/stockmentor/infrastructure/security/CorsProperties.java`
 
 ### Database and User Persistence
 
@@ -106,15 +108,21 @@
 
 - Create: `stockmentor-backend/src/main/java/com/stockmentor/user/dto/UpdateNicknameRequest.java`
 - Create: `stockmentor-backend/src/main/java/com/stockmentor/user/vo/CurrentUserResponse.java`
+- Create: `stockmentor-backend/src/main/java/com/stockmentor/user/service/NicknameNormalizer.java`
 - Create: `stockmentor-backend/src/main/java/com/stockmentor/user/service/UserService.java`
 - Create: `stockmentor-backend/src/main/java/com/stockmentor/user/controller/CurrentUserController.java`
 
 ### Backend Tests
 
 - Create: `stockmentor-backend/src/test/java/com/stockmentor/auth/service/EmailNormalizerTest.java`
+- Create: `stockmentor-backend/src/test/java/com/stockmentor/auth/dto/AuthRequestValidationTest.java`
+- Create: `stockmentor-backend/src/test/java/com/stockmentor/user/service/NicknameNormalizerTest.java`
+- Create: `stockmentor-backend/src/test/java/com/stockmentor/infrastructure/security/JwtPropertiesTest.java`
 - Create: `stockmentor-backend/src/test/java/com/stockmentor/infrastructure/security/JwtTokenProviderTest.java`
 - Create: `stockmentor-backend/src/test/java/com/stockmentor/auth/service/AuthenticationServiceTest.java`
+- Create: `stockmentor-backend/src/test/java/com/stockmentor/infrastructure/security/SecurityUserServiceTest.java`
 - Create: `stockmentor-backend/src/test/java/com/stockmentor/infrastructure/security/JwtAuthenticationFilterTest.java`
+- Create: `stockmentor-backend/src/test/java/com/stockmentor/infrastructure/security/SecurityConfigTest.java`
 - Create: `stockmentor-backend/src/test/java/com/stockmentor/auth/controller/AuthControllerTest.java`
 - Create: `stockmentor-backend/src/test/java/com/stockmentor/user/service/UserServiceTest.java`
 - Create: `stockmentor-backend/src/test/java/com/stockmentor/user/controller/CurrentUserControllerTest.java`
@@ -143,7 +151,17 @@
 - Create: `stockmentor-frontend/vitest.config.ts`
 - Create: `stockmentor-frontend/src/features/auth/session/authSession.spec.ts`
 - Create: `stockmentor-frontend/src/features/auth/stores/authStore.spec.ts`
+- Create: `stockmentor-frontend/src/api/http.spec.ts`
 - Create: `stockmentor-frontend/src/router/routerGuards.spec.ts`
+- Create: `stockmentor-frontend/src/features/auth/views/LoginView.spec.ts`
+- Create: `stockmentor-frontend/src/features/auth/views/RegisterView.spec.ts`
+- Create: `stockmentor-frontend/src/features/auth/views/AuthDashboardView.spec.ts`
+- Create: `stockmentor-frontend/src/features/profile/views/ProfileView.spec.ts`
+
+### Ignored Runtime Evidence
+
+- Create without committing: `.superpowers/sdd/2026-07-26-stockmentor-v0.2-authentication/v0.2-runtime-report.md`
+- Tasks 11 and 16 append their real runtime evidence to this file and do not create empty Git commits.
 
 ### Documentation
 
@@ -285,6 +303,8 @@ git commit -m "docs: add v0.2 authentication design and plan"
 - Modify: `stockmentor-backend/src/main/resources/application-local.yml.example`
 - Create: `stockmentor-backend/src/main/java/com/stockmentor/infrastructure/security/JwtProperties.java`
 - Create: `stockmentor-backend/src/test/java/com/stockmentor/infrastructure/security/JwtPropertiesTest.java`
+- Create: `stockmentor-backend/src/test/resources/application-test.yml`
+- Modify: `stockmentor-backend/src/test/java/com/stockmentor/StockMentorApplicationTests.java`
 
 **Interfaces:**
 - Consumes: Spring Boot configuration
@@ -379,11 +399,15 @@ JWT_EXPIRATION=7200
 
 `application-local.yml.example` must reference environment variables, not contain a usable secret.
 
-- [ ] **Step 7: Enable configuration properties**
+- [ ] **Step 7: Add the fixed test-only configuration**
+
+Create `stockmentor-backend/src/test/resources/application-test.yml` with a fixed, clearly non-production JWT secret containing at least 32 UTF-8 bytes and `expiration-seconds: 7200`. Add `@ActiveProfiles("test")` to the existing `StockMentorApplicationTests`; every later test that loads the Spring context must also activate the `test` profile. Do not place a usable local or production secret in this file.
+
+- [ ] **Step 8: Enable configuration properties**
 
 Add `@EnableConfigurationProperties(JwtProperties.class)` to a focused security configuration class or the application class. Do not enable default Spring Security users.
 
-- [ ] **Step 8: Run the property test**
+- [ ] **Step 9: Run the property test**
 
 ```powershell
 & mvn.cmd -f stockmentor-backend\pom.xml -Dtest=JwtPropertiesTest test
@@ -391,7 +415,7 @@ Add `@EnableConfigurationProperties(JwtProperties.class)` to a focused security 
 
 Expected: PASS.
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 10: Commit**
 
 ```powershell
 git add stockmentor-backend/pom.xml `
@@ -399,6 +423,8 @@ git add stockmentor-backend/pom.xml `
         stockmentor-backend/src/main/resources/application-local.yml.example `
         stockmentor-backend/src/main/java/com/stockmentor/infrastructure/security/JwtProperties.java `
         stockmentor-backend/src/test/java/com/stockmentor/infrastructure/security/JwtPropertiesTest.java `
+        stockmentor-backend/src/test/resources/application-test.yml `
+        stockmentor-backend/src/test/java/com/stockmentor/StockMentorApplicationTests.java `
         .env.example
 git commit -m "feat: add validated jwt configuration"
 ```
@@ -420,7 +446,7 @@ git commit -m "feat: add validated jwt configuration"
 **Interfaces:**
 - Produces:
   - `Optional<UserEntity> findByNormalizedEmail(String email)`
-  - `Optional<UserEntity> findActiveIdentityById(long userId)`
+  - `Optional<UserEntity> findIdentityById(long userId)`
   - `UserEntity save(UserEntity user)`
   - `boolean updateLastLoginAt(long userId, LocalDateTime value)`
   - `boolean updateNickname(long userId, String nickname)`
@@ -542,20 +568,23 @@ git commit -m "feat: add user persistence model"
 
 **Files:**
 - Create: `stockmentor-backend/src/main/java/com/stockmentor/auth/service/EmailNormalizer.java`
+- Create: `stockmentor-backend/src/main/java/com/stockmentor/user/service/NicknameNormalizer.java`
 - Create: `stockmentor-backend/src/main/java/com/stockmentor/auth/dto/RegisterRequest.java`
 - Create: `stockmentor-backend/src/main/java/com/stockmentor/auth/dto/LoginRequest.java`
 - Create: `stockmentor-backend/src/main/java/com/stockmentor/user/dto/UpdateNicknameRequest.java`
 - Modify: `stockmentor-backend/src/main/java/com/stockmentor/common/exception/ErrorCode.java`
 - Create: `stockmentor-backend/src/test/java/com/stockmentor/auth/service/EmailNormalizerTest.java`
+- Create: `stockmentor-backend/src/test/java/com/stockmentor/user/service/NicknameNormalizerTest.java`
 - Create: `stockmentor-backend/src/test/java/com/stockmentor/auth/dto/AuthRequestValidationTest.java`
 
 **Interfaces:**
 - Produces:
   - `String EmailNormalizer.normalize(String rawEmail)`
+  - `String NicknameNormalizer.normalize(String rawNickname)`
   - validated request records
   - stable authentication and user error codes
 
-- [ ] **Step 1: Write email normalization tests**
+- [ ] **Step 1: Write failing normalization tests**
 
 ```java
 @Test
@@ -567,17 +596,31 @@ void shouldTrimAndLowercaseEmail() {
 @Test
 void shouldRejectNullEmail() {
     assertThatThrownBy(() -> normalizer.normalize(null))
-        .isInstanceOf(IllegalArgumentException.class);
+        .isInstanceOfSatisfying(BusinessException.class, exception ->
+            assertThat(exception.getErrorCode())
+                .isEqualTo(ErrorCode.VALIDATION_FAILED));
 }
 ```
+
+`EmailNormalizerTest` must also reject invalid format and normalized email length above 254, while accepting valid mixed-case input with surrounding spaces.
+
+`NicknameNormalizerTest` must verify:
+
+- `"  长期学习者  "` becomes `"长期学习者"`;
+- a nickname whose normalized value is exactly 20 characters remains valid even when the raw value has surrounding spaces;
+- pure-space, normalized length below 2 or above 20, and illegal characters throw `BusinessException` with `USER_NICKNAME_INVALID`;
+- Chinese characters, internal spaces, underscores and hyphens pass.
 
 - [ ] **Step 2: Run and confirm failure**
 
 ```powershell
-& mvn.cmd -f stockmentor-backend\pom.xml -Dtest=EmailNormalizerTest test
+& mvn.cmd -f stockmentor-backend\pom.xml `
+  -Dtest=EmailNormalizerTest,NicknameNormalizerTest,AuthRequestValidationTest test
 ```
 
-- [ ] **Step 3: Implement `EmailNormalizer`**
+Expected: compilation failure because the normalizers and request records do not exist.
+
+- [ ] **Step 3: Implement reusable Service-layer normalizers**
 
 ```java
 @Component
@@ -602,36 +645,35 @@ public class EmailNormalizer {
 }
 ```
 
+`NicknameNormalizer` must `trim()` first and then enforce the approved non-empty, 2–20 character and `^[\p{IsHan}A-Za-z0-9 _-]+$` rules. It throws `BusinessException(ErrorCode.USER_NICKNAME_INVALID)` for null or invalid normalized input. Registration and profile update must both call this component; do not duplicate nickname rules in those services.
+
 - [ ] **Step 4: Define request DTOs**
+
+Fields that require normalization must not have raw-value annotations that can reject a value before the Service layer trims or lowercases it. DTO validation checks only their presence; the normalizers own final format and normalized-length validation.
 
 `RegisterRequest`:
 
 ```java
 public record RegisterRequest(
-    @NotBlank @Size(max = 254) @Email String email,
-    @NotBlank
+    @NotNull String email,
+    @NotNull
     @Size(min = 8, max = 64)
     @Pattern(regexp = "^(?=.*[A-Za-z])(?=.*\\d).{8,64}$")
     String password,
-    @NotBlank
-    @Size(min = 2, max = 20)
-    @Pattern(regexp = "^[\\p{IsHan}A-Za-z0-9 _-]+$")
-    String nickname
+    @NotNull String nickname
 ) {}
 ```
 
-`LoginRequest` uses the same email and password length rules but must not enforce password composition again if that would prevent an existing valid account from attempting login. Use:
+`LoginRequest` must not apply `@Email`, raw email length, or password composition checks. It permits normalization before final email validation and permits an existing valid account to attempt login:
 
 ```java
 public record LoginRequest(
-    @NotBlank @Size(max = 254) String email,
-    @NotBlank @Size(min = 8, max = 64) String password
+    @NotNull String email,
+    @NotNull @Size(min = 8, max = 64) String password
 ) {}
 ```
 
-`UpdateNicknameRequest` uses the same nickname constraints as registration.
-
-The service must normalize nickname before final business validation, because Bean Validation runs before trimming.
+`UpdateNicknameRequest` contains `@NotNull String nickname`; `NicknameNormalizer` performs its final validation after trimming.
 
 - [ ] **Step 5: Extend `ErrorCode`**
 
@@ -652,20 +694,23 @@ Only safe public codes are returned to clients.
 
 - [ ] **Step 6: Test DTO validation**
 
-Use Jakarta Validator to verify:
+Use Jakarta Validator to verify only raw DTO invariants:
 
 - password with letters and digits passes;
 - letters-only password fails registration;
 - digits-only password fails registration;
 - 65-character password fails;
-- pure-space nickname fails after service normalization;
-- Chinese nickname passes;
-- underscore and hyphen pass.
+- registration email with surrounding spaces is not rejected before normalization;
+- registration and update nicknames with surrounding spaces are not rejected before normalization;
+- null email and nickname fail the DTO presence check.
+
+Keep final email and nickname behavior in the focused normalizer tests; do not duplicate or weaken it in DTO annotations.
 
 - [ ] **Step 7: Run tests**
 
 ```powershell
-& mvn.cmd -f stockmentor-backend\pom.xml -Dtest=EmailNormalizerTest,AuthRequestValidationTest test
+& mvn.cmd -f stockmentor-backend\pom.xml `
+  -Dtest=EmailNormalizerTest,NicknameNormalizerTest,AuthRequestValidationTest test
 ```
 
 - [ ] **Step 8: Commit**
@@ -673,8 +718,10 @@ Use Jakarta Validator to verify:
 ```powershell
 git add stockmentor-backend/src/main/java/com/stockmentor/auth `
         stockmentor-backend/src/main/java/com/stockmentor/user/dto `
+        stockmentor-backend/src/main/java/com/stockmentor/user/service/NicknameNormalizer.java `
         stockmentor-backend/src/main/java/com/stockmentor/common/exception/ErrorCode.java `
-        stockmentor-backend/src/test/java/com/stockmentor/auth
+        stockmentor-backend/src/test/java/com/stockmentor/auth `
+        stockmentor-backend/src/test/java/com/stockmentor/user/service/NicknameNormalizerTest.java
 git commit -m "feat: add authentication input rules"
 ```
 
@@ -697,12 +744,16 @@ git commit -m "feat: add authentication input rules"
 Tests must verify:
 
 ```java
-String token = provider.issue(42L, Instant.parse("2026-07-26T12:00:00Z"));
+Instant issuedAt = Instant.now()
+    .truncatedTo(ChronoUnit.SECONDS)
+    .minusSeconds(60);
+String token = provider.issue(42L, issuedAt);
 Jwt decoded = decoder.decode(token);
 
 assertThat(decoded.getSubject()).isEqualTo("42");
-assertThat(decoded.getIssuedAt()).isEqualTo(Instant.parse("2026-07-26T12:00:00Z"));
-assertThat(decoded.getExpiresAt()).isEqualTo(Instant.parse("2026-07-26T14:00:00Z"));
+assertThat(decoded.getIssuedAt()).isEqualTo(issuedAt);
+assertThat(decoded.getExpiresAt())
+    .isEqualTo(issuedAt.plusSeconds(properties.expirationSeconds()));
 assertThat(decoded.getId()).isNotBlank();
 assertThat(decoded.getClaims()).doesNotContainKeys("email", "nickname", "role");
 ```
@@ -710,9 +761,11 @@ assertThat(decoded.getClaims()).doesNotContainKeys("email", "nickname", "role");
 Also verify:
 
 - invalid signature throws an authentication-specific exception;
-- expired Token maps to `AUTH_TOKEN_EXPIRED`;
+- a Token issued relative to `Instant.now().truncatedTo(ChronoUnit.SECONDS)`, more than `properties.expirationSeconds()` in the past, maps to `AUTH_TOKEN_EXPIRED`;
 - non-numeric `sub` maps to `AUTH_INVALID_TOKEN`;
 - altered Token is rejected.
+
+Do not use a fixed calendar instant for a positive decode through a timestamp-validating decoder. Derive valid and expired fixtures relative to the test clock, or inject the same fixed `Clock` into the validator and test.
 
 - [ ] **Step 2: Run and confirm failure**
 
@@ -791,7 +844,7 @@ git commit -m "feat: add minimal jwt token provider"
 
 **Interfaces:**
 - Produces:
-  - `AuthResponse register(RegisterRequest request)`
+  - transactional `AuthResponse register(RegisterRequest request)`
   - `AuthResponse login(LoginRequest request)`
   - `CurrentUserResponse` without password or internal status
 
@@ -835,7 +888,9 @@ Using Mockito, verify:
 - role is `USER`;
 - status is `ACTIVE`;
 - `lastLoginAt` is set;
-- token is issued after a user ID exists;
+- `register` declares a Spring `@Transactional` boundary;
+- token is issued only after a user ID exists and the first-login update succeeds;
+- when `updateLastLoginAt` returns `false`, registration throws `BusinessException(INTERNAL_ERROR)` and never calls `JwtTokenProvider.issue`;
 - returned response contains no password field.
 
 - [ ] **Step 3: Write login tests**
@@ -865,21 +920,23 @@ PasswordEncoder passwordEncoder() {
 }
 ```
 
-- [ ] **Step 6: Implement registration**
+- [ ] **Step 6: Implement transactional registration**
+
+Annotate `register` with Spring's `@Transactional`. `BusinessException` is unchecked, so a failed post-insert operation rolls the transaction back.
 
 Required order:
 
 1. normalize email;
-2. trim and validate nickname;
+2. normalize and validate nickname through `NicknameNormalizer`;
 3. check duplicate;
 4. hash password;
 5. construct USER/ACTIVE entity;
 6. save;
-7. update or populate first login time;
-8. issue Token;
+7. require `updateLastLoginAt(savedUserId, loginAt)` to return `true`; otherwise throw `BusinessException(ErrorCode.INTERNAL_ERROR)`;
+8. issue Token only after every database operation above succeeds;
 9. map to `AuthResponse`.
 
-Catch database duplicate-key exceptions and convert them to `USER_EMAIL_ALREADY_EXISTS`.
+Catch database duplicate-key exceptions and convert them to `USER_EMAIL_ALREADY_EXISTS`. Do not catch and suppress the first-login failure; it must escape the method, prevent Token issuance and cause the inserted user to roll back.
 
 - [ ] **Step 7: Implement login**
 
@@ -1015,13 +1072,19 @@ git commit -m "feat: add database-backed jwt authentication"
 **Files:**
 - Create: `stockmentor-backend/src/main/java/com/stockmentor/infrastructure/security/RestAuthenticationEntryPoint.java`
 - Create: `stockmentor-backend/src/main/java/com/stockmentor/infrastructure/security/RestAccessDeniedHandler.java`
+- Create: `stockmentor-backend/src/main/java/com/stockmentor/infrastructure/security/CorsProperties.java`
 - Replace or modify: `stockmentor-backend/src/main/java/com/stockmentor/infrastructure/config/SecurityBaselineConfig.java`
+- Modify: `stockmentor-backend/src/main/resources/application.yml`
+- Modify: `stockmentor-backend/src/main/resources/application-local.yml.example`
+- Modify: `.env.example`
 - Create: `stockmentor-backend/src/test/java/com/stockmentor/infrastructure/security/SecurityConfigTest.java`
+- Modify: `stockmentor-backend/src/test/java/com/stockmentor/StockMentorApplicationTests.java`
 
 **Interfaces:**
 - Produces:
   - unified JSON 401 using `AUTH_INVALID_TOKEN`
   - unified JSON 403 using `FORBIDDEN`
+  - environment-configurable explicit CORS origin whitelist
   - public auth, health and OpenAPI routes
   - protected remaining API routes
 
@@ -1036,6 +1099,12 @@ GET /api/v1/system/health  -> 200
 GET /v3/api-docs           -> 200
 GET /api/v1/users/me       -> 401 without Token
 ```
+
+With the test whitelist set to `http://localhost:5173`, also verify:
+
+- a preflight `OPTIONS` request from `http://localhost:5173` receives `Access-Control-Allow-Origin: http://localhost:5173`;
+- the required `Authorization`, `Content-Type` and `Accept` headers and `GET`, `POST`, `PATCH`, `OPTIONS` methods are allowed;
+- an origin not present in the whitelist is rejected and receives no allow-origin header.
 
 Assert 401 JSON:
 
@@ -1052,13 +1121,53 @@ Assert 401 JSON:
 Serialize `ApiResponse.failure(...)` through the configured Jackson `ObjectMapper`.
 Set content type to UTF-8 JSON and set the correct HTTP status before writing.
 
-- [ ] **Step 3: Replace baseline security chain**
+- [ ] **Step 3: Add the environment-configurable CORS whitelist**
+
+Add:
+
+```yaml
+stockmentor:
+  security:
+    cors:
+      allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
+```
+
+Add a safe example to `.env.example`:
+
+```dotenv
+CORS_ALLOWED_ORIGINS=http://localhost:5173
+```
+
+`application-local.yml.example` must reference the environment variable. Bind the comma-separated values through:
+
+```java
+@ConfigurationProperties(prefix = "stockmentor.security.cors")
+public record CorsProperties(List<String> allowedOrigins) {
+    public CorsProperties {
+        if (allowedOrigins == null
+                || allowedOrigins.isEmpty()
+                || allowedOrigins.stream().anyMatch(origin ->
+                    origin == null || origin.isBlank() || "*".equals(origin.trim()))) {
+            throw new IllegalArgumentException(
+                "CORS allowed origins must be an explicit non-empty whitelist");
+        }
+        allowedOrigins = allowedOrigins.stream()
+            .map(String::trim)
+            .toList();
+    }
+}
+```
+
+Enable `CorsProperties` with the existing JWT configuration properties. Build a `UrlBasedCorsConfigurationSource` for `/api/**` using only the configured origins, methods `GET`, `POST`, `PATCH`, `OPTIONS`, headers `Authorization`, `Content-Type`, `Accept`, and `allowCredentials(false)`. Do not use `*`.
+
+- [ ] **Step 4: Replace baseline security chain**
 
 Final rules:
 
 ```java
 http
     .csrf(AbstractHttpConfigurer::disable)
+    .cors(Customizer.withDefaults())
     .formLogin(AbstractHttpConfigurer::disable)
     .httpBasic(AbstractHttpConfigurer::disable)
     .sessionManagement(session ->
@@ -1080,22 +1189,25 @@ http
     .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 ```
 
-- [ ] **Step 4: Ensure no default user/password is created**
+- [ ] **Step 5: Ensure no default user/password is created**
 
-Keep the V0.1 exclusion or configuration that prevents default password logs. In `StockMentorApplicationTests`, add an explicit assertion that the context contains no `UserDetailsServiceAutoConfiguration`-created default user bean and retain the existing captured-log assertion whose expected generated-password match count is zero.
+Keep the V0.1 exclusion or configuration that prevents default password logs and retain the existing no-`UserDetailsService` bean regression assertion. `StockMentorApplicationTests` currently has no captured-log regression, so add `OutputCaptureExtension` and a new assertion whose expected match count for `Using generated security password` is zero.
 
-- [ ] **Step 5: Run tests**
+- [ ] **Step 6: Run tests**
 
 ```powershell
 & mvn.cmd -f stockmentor-backend\pom.xml -Dtest=SecurityConfigTest,*ApplicationTests test
 ```
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```powershell
 git add stockmentor-backend/src/main/java/com/stockmentor/infrastructure `
+        stockmentor-backend/src/main/resources/application.yml `
+        stockmentor-backend/src/main/resources/application-local.yml.example `
         stockmentor-backend/src/test/java/com/stockmentor/infrastructure `
-        stockmentor-backend/src/test/java/com/stockmentor/StockMentorApplicationTests.java
+        stockmentor-backend/src/test/java/com/stockmentor/StockMentorApplicationTests.java `
+        .env.example
 git commit -m "feat: secure api with unified jwt handling"
 ```
 
@@ -1219,7 +1331,7 @@ public CurrentUserResponse getCurrentUser(long userId) {
 }
 ```
 
-Nickname logic must normalize before update and then read the latest record.
+Nickname logic must call the reusable `NicknameNormalizer` from Task 4 before update and then read the latest record. Do not duplicate nickname validation in `UserService`.
 
 - [ ] **Step 3: Write controller tests**
 
@@ -1447,9 +1559,9 @@ Verify installed `MySQL84` remains `Running`.
 Delete only the validated temporary datadir.
 Clear password and secret environment variables.
 
-- [ ] **Step 12: Do not commit runtime secrets or logs**
+- [ ] **Step 12: Record ignored evidence and create no empty commit**
 
-Only summarize non-sensitive evidence in the final changelog.
+Append non-sensitive results to `.superpowers/sdd/2026-07-26-stockmentor-v0.2-authentication/v0.2-runtime-report.md`; only summarize safe evidence in the final changelog. This task intentionally changes no tracked file and must not create an empty Git commit. If runtime verification reproduces a defect, fix it under a focused failing test and use a separate scoped fix commit.
 
 ---
 
@@ -1655,6 +1767,7 @@ git commit -m "feat: add pinia authentication state"
 
 **Files:**
 - Modify: `stockmentor-frontend/src/api/http.ts`
+- Create: `stockmentor-frontend/src/api/http.spec.ts`
 - Modify: `stockmentor-frontend/src/router/index.ts`
 - Modify: `stockmentor-frontend/src/main.ts`
 - Create: `stockmentor-frontend/src/router/routerGuards.spec.ts`
@@ -1674,7 +1787,16 @@ Verify:
 - route guard waits for `restoreSession`;
 - login endpoint 401 does not cause an infinite redirect loop.
 
-- [ ] **Step 2: Implement request interceptor**
+- [ ] **Step 2: Run focused tests and confirm RED**
+
+```powershell
+Set-Location stockmentor-frontend
+& npm.cmd run test:unit -- src/api/http.spec.ts src/router/routerGuards.spec.ts
+```
+
+Expected: focused tests fail because authentication interceptors and guards are not implemented.
+
+- [ ] **Step 3: Implement request interceptor**
 
 Use the session adapter or store access that does not create circular imports:
 
@@ -1688,7 +1810,7 @@ http.interceptors.request.use((config) => {
 })
 ```
 
-- [ ] **Step 3: Implement response interceptor**
+- [ ] **Step 4: Implement response interceptor**
 
 For 401:
 
@@ -1699,7 +1821,7 @@ For 401:
 
 Use request URL and public error code to distinguish cases.
 
-- [ ] **Step 4: Define route metadata**
+- [ ] **Step 5: Define route metadata**
 
 Routes:
 
@@ -1712,15 +1834,15 @@ Routes:
 
 Redirect `/` to `/dashboard`.
 
-- [ ] **Step 5: Add global guard**
+- [ ] **Step 6: Add global guard**
 
 The guard must call `restoreSession()` exactly once before making redirect decisions.
 
-- [ ] **Step 6: Initialize auth before mount when required**
+- [ ] **Step 7: Initialize auth before mount when required**
 
 Update `main.ts` so Pinia exists before store restoration. Avoid a blank infinite state: application mount must complete after authentication initialization resolves or fails safely.
 
-- [ ] **Step 7: Run tests and type check**
+- [ ] **Step 8: Run tests and type check**
 
 ```powershell
 Set-Location stockmentor-frontend
@@ -1728,11 +1850,12 @@ Set-Location stockmentor-frontend
 & npm.cmd run type-check
 ```
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 9: Commit**
 
 ```powershell
 Set-Location ..
 git add stockmentor-frontend/src/api/http.ts `
+        stockmentor-frontend/src/api/http.spec.ts `
         stockmentor-frontend/src/router `
         stockmentor-frontend/src/main.ts
 git commit -m "feat: add auth interceptors and route guards"
@@ -1744,16 +1867,42 @@ git commit -m "feat: add auth interceptors and route guards"
 
 **Files:**
 - Create: `stockmentor-frontend/src/features/auth/views/LoginView.vue`
+- Create: `stockmentor-frontend/src/features/auth/views/LoginView.spec.ts`
 - Create: `stockmentor-frontend/src/features/auth/views/RegisterView.vue`
+- Create: `stockmentor-frontend/src/features/auth/views/RegisterView.spec.ts`
 - Create: `stockmentor-frontend/src/features/auth/views/AuthDashboardView.vue`
+- Create: `stockmentor-frontend/src/features/auth/views/AuthDashboardView.spec.ts`
 - Create: `stockmentor-frontend/src/features/profile/views/ProfileView.vue`
+- Create: `stockmentor-frontend/src/features/profile/views/ProfileView.spec.ts`
 - Modify: `stockmentor-frontend/src/App.vue`
 - Modify: `stockmentor-frontend/src/router/index.ts`
 
 **Interfaces:**
 - Produces: complete V0.2 browser flow without V0.6 dashboard features
 
-- [ ] **Step 1: Implement login view**
+- [ ] **Step 1: Write focused failing view tests**
+
+Create the four colocated view specs before the components:
+
+- `LoginView.spec.ts` verifies fields, pending disablement, login dispatch, safe error rendering, navigation and the education-only notice.
+- `RegisterView.spec.ts` verifies password confirmation stays frontend-only, the password rule is visible, successful automatic-login navigation, and safe 409 handling.
+- `AuthDashboardView.spec.ts` verifies only the approved V0.2 identity/placeholder content, profile link and local logout behavior.
+- `ProfileView.spec.ts` verifies read-only email, nickname update, pending/success/error feedback, immediate store refresh and logout.
+
+- [ ] **Step 2: Run focused view tests and confirm RED**
+
+```powershell
+Set-Location stockmentor-frontend
+& npm.cmd run test:unit -- `
+  src/features/auth/views/LoginView.spec.ts `
+  src/features/auth/views/RegisterView.spec.ts `
+  src/features/auth/views/AuthDashboardView.spec.ts `
+  src/features/profile/views/ProfileView.spec.ts
+```
+
+Expected: the focused tests fail because the four view components do not exist.
+
+- [ ] **Step 3: Implement login view**
 
 Form fields:
 
@@ -1774,7 +1923,7 @@ Behavior:
 
 Do not store password after submit.
 
-- [ ] **Step 2: Implement registration view**
+- [ ] **Step 4: Implement registration view**
 
 Fields:
 
@@ -1794,7 +1943,7 @@ Rules:
 - navigate to `/dashboard` after automatic login;
 - handle 409 email conflict.
 
-- [ ] **Step 3: Implement authenticated dashboard placeholder**
+- [ ] **Step 5: Implement authenticated dashboard placeholder**
 
 Display only:
 
@@ -1808,7 +1957,7 @@ Display only:
 
 Do not add learning progress charts, portfolio performance or course data.
 
-- [ ] **Step 4: Implement profile view**
+- [ ] **Step 6: Implement profile view**
 
 Display:
 
@@ -1819,11 +1968,23 @@ Display:
 - update store after save;
 - logout button.
 
-- [ ] **Step 5: Update App root**
+- [ ] **Step 7: Update App root**
 
 Use `<RouterView />` and a minimal shell. Authentication pages must not be wrapped in a trading-terminal visual style.
 
-- [ ] **Step 6: Run frontend tests and build**
+- [ ] **Step 8: Run the focused view tests and confirm GREEN**
+
+```powershell
+& npm.cmd run test:unit -- `
+  src/features/auth/views/LoginView.spec.ts `
+  src/features/auth/views/RegisterView.spec.ts `
+  src/features/auth/views/AuthDashboardView.spec.ts `
+  src/features/profile/views/ProfileView.spec.ts
+```
+
+Expected: all focused view tests pass with pristine output.
+
+- [ ] **Step 9: Run the full frontend tests and build**
 
 ```powershell
 Set-Location stockmentor-frontend
@@ -1834,7 +1995,7 @@ Set-Location stockmentor-frontend
 
 Expected: all pass. Existing chunk-size warning may remain documented as non-blocking; do not add ECharts to authentication pages.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 10: Commit**
 
 ```powershell
 Set-Location ..
@@ -1849,7 +2010,7 @@ git commit -m "feat: add authentication user interface"
 ### Task 16: Verify the Full Browser Authentication Flow
 
 **Files:**
-- Evidence only in ignored runtime report
+- Append evidence only to ignored `.superpowers/sdd/2026-07-26-stockmentor-v0.2-authentication/v0.2-runtime-report.md`
 - Modify code only when a reproduced defect has a proven root cause
 
 **Interfaces:**
@@ -1862,7 +2023,7 @@ Use the Task 11 environment and a fresh database or a deliberately reset dedicat
 
 - [ ] **Step 2: Start frontend**
 
-Use an explicit API configuration or Vite proxy that reaches the backend. Do not commit machine-specific URLs.
+Use an explicit API configuration that reaches the backend and set `CORS_ALLOWED_ORIGINS` so the exact frontend origin is present in the backend whitelist. Verify the preflight response before the browser flow. Do not commit machine-specific URLs.
 
 - [ ] **Step 3: Verify registration**
 
@@ -1914,6 +2075,10 @@ Expected:
 Stop only processes started for this test.
 Verify no residual listeners on development/test ports.
 Keep the installed MySQL service state unchanged.
+
+- [ ] **Step 9: Record ignored evidence and create no empty commit**
+
+Append the browser-flow results and cleanup evidence to the ignored runtime report. This task intentionally changes no tracked file and must not create an empty Git commit. If the browser flow reproduces a defect, first add a focused failing test, make the minimum fix in a separate scoped commit, and re-run the affected flow.
 
 ---
 
@@ -2086,9 +2251,10 @@ V0.2 may be presented for PR review only when all items below have fresh evidenc
 17. Backend full tests and package pass under Java 17.
 18. Frontend unit tests, type-check and build pass.
 19. Health and OpenAPI remain public and operational.
-20. No default password, plaintext password, full JWT or secret appears in logs or Git.
-21. README, learning notes, checklist and changelog contain actual evidence.
-22. No V0.3 or later business module is implemented.
+20. Backend CORS allows only the explicit origins configured through `CORS_ALLOWED_ORIGINS`.
+21. No default password, plaintext password, full JWT or secret appears in logs or Git.
+22. README, learning notes, checklist and changelog contain actual evidence.
+23. No V0.3 or later business module is implemented.
 
 ## Implementation Handoff
 
@@ -2098,11 +2264,14 @@ Recommended execution mode:
 Subagent-Driven
 ```
 
-Codex should dispatch a fresh worker for each task, then run:
+Codex should dispatch a fresh worker for each task and use both review layers:
 
-1. specification compliance review;
-2. code quality and security review;
-3. task-specific tests;
-4. commit only after both reviews pass.
+1. implement the task through its RED/GREEN cycle and run the task-specific tests;
+2. before committing, the implementer performs the user-required specification-compliance and code-quality/security self-review and fixes its findings;
+3. create the task's focused commit only after those pre-commit checks pass;
+4. the SDD controller generates the commit-range review package and dispatches a fresh independent reviewer;
+5. independent findings are resolved in focused follow-up fix commits and scoped re-review rounds.
+
+This supplements rather than replaces the execution prompt's review-before-commit rule. Implementer self-review does not replace the independent SDD review, and the independent review does not retroactively waive the pre-commit checks.
 
 The branch remains `codex/v0.2-authentication` until PR approval. Do not merge automatically.
