@@ -13,6 +13,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
 import jakarta.validation.constraints.NotBlank;
+import java.lang.reflect.Modifier;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -66,6 +67,11 @@ class GlobalExceptionHandlerTest {
         assertThat(BusinessException.class.getConstructors())
                 .allSatisfy(constructor -> assertThat(constructor.getParameterTypes())
                         .doesNotContain(String.class, Throwable.class));
+    }
+
+    @Test
+    void businessExceptionCannotBeSubclassedToOverrideItsClientMessage() {
+        assertThat(Modifier.isFinal(BusinessException.class.getModifiers())).isTrue();
     }
 
     @Test

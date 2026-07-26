@@ -89,7 +89,7 @@ Set-Location stockmentor-frontend
 
 - Spring Boot 3 / Java 17 / Maven 后端工程基线。
 - 统一 `ApiResponse<T>`、稳定错误码和全局异常处理。
-- Spring Security 公共端点基线。
+- Spring Security 公共端点基线；V0.1 不自动创建默认用户，也不输出随机安全密码。
 - `/api/v1/system/health` 健康检查。
 - `/v3/api-docs` OpenAPI 文档与固定元数据。
 - Flyway V1 非业务元数据迁移及安全本地配置示例。
@@ -103,7 +103,7 @@ V0.2 的认证设计与实现尚未开始；用户、课程、题库、错题、
 2026-07-26 使用上述工具链实际完成：
 
 ```text
-mvn clean test       -> BUILD SUCCESS，16/16 测试通过
+mvn clean test       -> BUILD SUCCESS，18/18 测试通过
 mvn clean package    -> BUILD SUCCESS，生成可执行 JAR
 npm run type-check   -> exit 0
 npm run build        -> exit 0
