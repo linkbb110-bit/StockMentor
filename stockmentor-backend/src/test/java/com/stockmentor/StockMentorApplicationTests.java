@@ -2,12 +2,14 @@ package com.stockmentor;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.stockmentor.user.mapper.UserMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationContext;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 @SpringBootTest(properties = {
     "spring.autoconfigure.exclude=org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration,"
@@ -16,6 +18,9 @@ import org.springframework.test.context.ActiveProfiles;
 })
 @ActiveProfiles("test")
 class StockMentorApplicationTests {
+
+    @MockitoBean
+    private UserMapper userMapper;
 
     @Autowired
     private ApplicationContext applicationContext;
