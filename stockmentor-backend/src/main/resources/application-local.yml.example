@@ -8,3 +8,9 @@ spring:
     password: ${DB_PASSWORD}
   flyway:
     enabled: ${FLYWAY_ENABLED:true}
+
+stockmentor:
+  security:
+    jwt:
+      secret: ${JWT_SECRET:}
+      expiration-seconds: ${JWT_EXPIRATION:7200}
