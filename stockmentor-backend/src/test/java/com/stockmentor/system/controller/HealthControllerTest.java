@@ -5,6 +5,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.stockmentor.user.mapper.UserMapper;
+import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -48,8 +49,17 @@ class HealthControllerTest {
     }
 
     @Test
-    void nonWhitelistedEndpointRejectsAnonymousRequests() throws Exception {
+    void protectedEndpointRejectsAnonymousRequestsWithUnifiedJson401() throws Exception {
         mockMvc.perform(get("/api/v1/system/not-public"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().encoding(StandardCharsets.UTF_8))
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(content().json("""
+                        {
+                          "code": "AUTH_INVALID_TOKEN",
+                          "message": "登录状态已失效，请重新登录",
+                          "data": null
+                        }
+                        """, JsonCompareMode.STRICT));
     }
 }
