@@ -15,4 +15,10 @@ public record AuthResponse(
     ) {
         return new AuthResponse(token, "Bearer", expiresIn, user);
     }
+
+    @Override
+    public String toString() {
+        return "AuthResponse[accessToken=REDACTED, tokenType=" + tokenType
+                + ", expiresIn=" + expiresIn + ", user=" + user + "]";
+    }
 }

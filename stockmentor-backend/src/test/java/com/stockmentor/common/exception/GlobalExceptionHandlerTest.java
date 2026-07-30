@@ -17,6 +17,9 @@ import java.lang.reflect.Modifier;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -27,7 +30,13 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
+@ExtendWith(OutputCaptureExtension.class)
 class GlobalExceptionHandlerTest {
+    private static final String UNEXPECTED_PASSWORD_SENTINEL =
+            "HANDLER_PASSWORD_SENTINEL_GOLF";
+    private static final String UNEXPECTED_TOKEN_SENTINEL =
+            "HANDLER_TOKEN_SENTINEL_HOTEL";
+
     private MockMvc mockMvc;
 
     @BeforeEach
@@ -133,6 +142,32 @@ class GlobalExceptionHandlerTest {
                 .andExpect(content().json("""
                         {"code":"INTERNAL_ERROR","message":"服务器内部错误","data":null}
                         """));
+    }
+
+    @Test
+    void unexpectedExceptionLogUsesOnlyASafeFixedEvent(
+            CapturedOutput output
+    ) {
+        IllegalStateException exception = new IllegalStateException(
+                "password=" + UNEXPECTED_PASSWORD_SENTINEL
+                    + ", token=" + UNEXPECTED_TOKEN_SENTINEL
+        );
+
+        ResponseEntity<ApiResponse<Void>> response =
+                new GlobalExceptionHandler().handleException(exception);
+
+        assertThat(response.getStatusCode())
+                .isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+        assertThat(response.getBody()).isEqualTo(ApiResponse.failure(
+                "INTERNAL_ERROR",
+                "服务器内部错误"
+        ));
+        assertThat(output.getAll())
+                .contains("Unexpected exception")
+                .doesNotContain(
+                        UNEXPECTED_PASSWORD_SENTINEL,
+                        UNEXPECTED_TOKEN_SENTINEL
+                );
     }
 
     private record ValidationRequest(@NotBlank String name) {

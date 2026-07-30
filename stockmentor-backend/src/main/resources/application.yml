@@ -16,6 +16,10 @@ springdoc:
   swagger-ui:
     path: /swagger-ui.html
 
+logging:
+  level:
+    org.springframework.web.servlet.mvc.method.annotation: INFO
+
 stockmentor:
   security:
     cors:

@@ -12,4 +12,9 @@ public record RegisterRequest(
         String password,
         @NotNull String nickname
 ) {
+    @Override
+    public String toString() {
+        return "RegisterRequest[email=" + email
+                + ", password=REDACTED, nickname=" + nickname + "]";
+    }
 }
