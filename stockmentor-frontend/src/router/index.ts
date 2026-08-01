@@ -5,8 +5,11 @@ import {
 } from 'vue-router'
 
 import { useAuthStore } from '../features/auth/stores/authStore'
+import AuthDashboardView from '../features/auth/views/AuthDashboardView.vue'
+import LoginView from '../features/auth/views/LoginView.vue'
+import RegisterView from '../features/auth/views/RegisterView.vue'
+import ProfileView from '../features/profile/views/ProfileView.vue'
 import { pinia } from '../stores'
-import FoundationView from '../views/FoundationView.vue'
 
 interface AuthenticationStore {
   readonly isAuthenticated: boolean
@@ -53,25 +56,25 @@ const router = createRouter({
     {
       path: '/login',
       name: 'login',
-      component: FoundationView,
+      component: LoginView,
       meta: { publicOnly: true },
     },
     {
       path: '/register',
       name: 'register',
-      component: FoundationView,
+      component: RegisterView,
       meta: { publicOnly: true },
     },
     {
       path: '/dashboard',
       name: 'dashboard',
-      component: FoundationView,
+      component: AuthDashboardView,
       meta: { requiresAuth: true },
     },
     {
       path: '/profile',
       name: 'profile',
-      component: FoundationView,
+      component: ProfileView,
       meta: { requiresAuth: true },
     },
   ],
