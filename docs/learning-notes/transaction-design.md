@@ -1,38 +1,25 @@
 # 事务设计学习笔记
 
-## 1. 这个模块解决什么问题
+## V0.2 已实现事务边界
 
-保证一次业务操作涉及多张表时要么全部成功，要么全部回滚。
+V0.2 只记录认证相关事务，不把后续课程、测验或虚拟交易描述成已实现。
 
-## 2. 需要事务的典型场景
+`stockmentor-backend/src/main/java/com/stockmentor/auth/service/AuthenticationService.java` 的 `register` 使用 `@Transactional`，边界包含：邮箱重复预检、BCrypt 哈希、用户插入和首次 `last_login_at` 更新。只有数据库步骤全部完成后才调用 `JwtTokenProvider.issue`；首次登录时间更新失败会抛异常，事务回滚用户写入且不签发 Token。
 
-- 提交测验：Attempt、Answer、得分和 WrongQuestion。
-- 虚拟交易：现金、持仓、交易记录和日志。
-- 完成课时：进度和学习记录。
-- 提交公司分析：分析主体、各分段和反馈状态。
+普通 `login` 不包住密码验证的长事务，只执行一次最后登录时间更新；更新失败不会签发 Token。`stockmentor-backend/src/main/java/com/stockmentor/user/service/UserService.java` 的 `updateNickname` 使用短事务，按当前用户 ID 更新后再读取最新安全资料。
 
-## 3. Spring 知识
+## 为什么事务放在 Service
 
-- `@Transactional`
-- 回滚规则
-- 事务传播
-- 隔离级别
-- 自调用失效
-- checked exception 与 rollbackFor
-- 数据库锁与乐观锁
+Controller 只处理协议和校验，Repository 只做持久化。Service 同时知道业务完成条件和失败语义，因此适合定义原子边界。异常不能被吞掉，否则 Spring 代理看不到失败并可能提交部分结果；JWT 这种外部可见结果也不能早于数据库提交条件产生。
 
-## 4. 常见错误
+## 实际测试证据
 
-- 在同类内部调用带 `@Transactional` 的方法。
-- 捕获异常后不重新抛出，导致事务提交。
-- 在事务中调用耗时的外部 AI 接口。
-- 事务范围过大。
-- 只更新内存对象，忘记持久化。
-- 并发时只依赖事务却没有锁或版本控制。
+- `AuthenticationServiceTest.java` 的 `registerDeclaresTransactionalBoundary` 和 `registerDoesNotIssueTokenWhenFirstLoginUpdateFails` 验证注册边界与签发顺序。
+- 同一测试类的 `loginAuthenticatesActiveUserThenUpdatesLastLoginBeforeIssuingToken` 和 `loginDoesNotIssueTokenWhenLastLoginUpdateFails` 验证登录顺序。
+- `UserServiceTest.java` 的 `updateNicknameDeclaresTheRequiredShortTransactionBoundary` 验证昵称短事务。
+- `MyBatisUserRepositoryTest.java` 验证更新语句只命中指定的非删除用户。
 
-## 5. 面试官可能追问
+## 常见错误与面试追问
 
-- Spring 事务为什么会失效？
-- 默认哪些异常触发回滚？
-- 如何缩短事务持锁时间？
-- 虚拟交易适合用乐观锁还是悲观锁？
+- 错误：同类自调用绕过事务代理；捕获异常后不抛出；在事务完成前签发 Token；把慢外部调用放进事务；更新条件缺少用户 ID。
+- 追问：为什么注册需要事务而密码验证不需要长事务？默认哪些异常触发回滚？如何让唯一索引竞态得到稳定业务错误？

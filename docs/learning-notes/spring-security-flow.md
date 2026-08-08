@@ -1,50 +1,38 @@
 # Spring Security 请求流程学习笔记
 
-## 1. 这个模块解决什么问题
+## V0.2 实际过滤链
 
-Spring Security 在请求进入 Controller 前完成认证、授权和异常处理，防止未登录用户或无权限用户访问受保护接口。
-
-## 2. 为什么这样设计
-
-安全逻辑集中在过滤链中，比在每个 Controller 手动判断 Token 更一致、更容易测试，也能减少遗漏。
-
-## 3. 请求经过哪些类
+配置位于 `stockmentor-backend/src/main/java/com/stockmentor/infrastructure/config/SecurityBaselineConfig.java`。文件名沿用 V0.1 基线，但 V0.2 已加入 BCrypt、显式 CORS、无状态会话、JWT Filter 和统一 401/403：
 
 ```text
 Servlet Container
-→ SecurityFilterChain
-→ CORS Filter
+→ CORS
 → JwtAuthenticationFilter
 → AnonymousAuthenticationFilter
 → AuthorizationFilter
 → Controller
 ```
 
-JWT 有效时，过滤器创建 `Authentication` 并写入 `SecurityContextHolder`。授权阶段再根据路径和角色决定是否允许访问。
+`POST /api/v1/auth/register`、`POST /api/v1/auth/login`、健康检查和 OpenAPI 公开；其余 `/api/v1/**` 默认需要认证。Form Login、HTTP Basic、CSRF 和服务端 Session 均未作为认证机制使用，策略为 `SessionCreationPolicy.STATELESS`。
 
-## 4. 使用的 Java 和 Spring 知识
+## 身份和异常职责
 
-- `SecurityFilterChain`
-- `HttpSecurity`
-- `OncePerRequestFilter`
-- `AuthenticationEntryPoint`
-- `AccessDeniedHandler`
-- 无状态会话策略
-- CSRF 与 CORS
-- 方法级权限
+- `JwtAuthenticationFilter.java` 读取并验证 Bearer Token，只在身份有效时写入 `SecurityContextHolder`。
+- `SecurityUserService.java` 从数据库读取当前状态和最新角色，返回 `AuthenticatedUser.java`。
+- `RestAuthenticationEntryPoint.java` 直接输出统一 JSON 401。
+- `RestAccessDeniedHandler.java` 直接输出统一 JSON 403。
+- `CorsProperties.java` 从 `CORS_ALLOWED_ORIGINS` 读取显式来源；拒绝空值、空白值和通配符。
 
-## 5. 常见错误
+认证失败表示身份缺失或无效，对应 401；身份有效但权限不足才是 403。过滤器处理可识别的认证失败后不继续链路，避免重复响应。
 
-- 把 401 和 403 混在一起。
-- 放行 Swagger 却漏掉相关静态资源路径。
-- CORS 预检请求被安全过滤器拦截。
-- JWT 过滤器注册两次。
-- 在异常处理器中返回 HTTP 200。
-- 前后端分离 API 仍保留不必要的表单登录。
+## 实际测试证据
 
-## 6. 面试官可能追问
+- `SecurityConfigTest.java` 验证公开/受保护路径、统一 401/403、允许来源预检和非白名单来源拒绝。
+- `JwtAuthenticationFilterTest.java` 验证 Bearer 格式、SecurityContext 写入/清理和每请求身份重载。
+- `SecurityUserServiceTest.java` 验证有效、禁用和不存在用户的内部分类。
+- 前端 `stockmentor-frontend/src/api/http.spec.ts` 验证登录 401 不触发循环，而受保护请求 401 只清理并跳转一次。
 
-- Spring Security 为什么基于过滤器而不是拦截器？
-- CSRF 为什么在无状态 Bearer Token API 中通常可以关闭？
-- CORS 与 Spring Security 的执行顺序为什么重要？
-- 如何实现角色和资源所有权两种授权？
+## 常见错误与面试追问
+
+- 错误：把 401/403 混用；重复注册 JWT Filter；使用 `*` CORS；让预检被认证拦截；保留默认表单登录或随机密码日志。
+- 追问：为什么 Security 基于过滤器？CORS 与认证的先后关系是什么？Bearer Token API 为什么可以关闭 CSRF？资源所有权授权应放在哪一层？
