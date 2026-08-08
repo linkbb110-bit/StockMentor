@@ -6,6 +6,11 @@ export interface CurrentUser {
   createdAt: string
 }
 
+export interface AuthenticationOwnership {
+  accessToken: string | null
+  generation: number
+}
+
 export interface AuthResponse {
   accessToken: string
   tokenType: 'Bearer'

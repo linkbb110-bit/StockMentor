@@ -91,11 +91,11 @@ Set-Location stockmentor-frontend
 ## V0.2 已实现范围
 
 - Flyway V2 `sys_user` 用户表、标准化邮箱唯一约束、`USER`/`ADMIN` 角色和 `ACTIVE`/`DISABLED` 状态模型。
-- 邮箱密码注册与登录；注册成功后自动登录，密码只以 BCrypt 哈希持久化，错误密码和不存在邮箱返回相同公共错误。
+- 邮箱密码注册与登录；注册成功后自动登录。密码保持原值、不 trim，须同时满足 8–64 字符和不超过 72 个 UTF-8 字节，只以 BCrypt 哈希持久化；错误密码和不存在邮箱返回相同公共错误。
 - 两小时 JWT Access Token；只含 `sub`、`iat`、`exp`、`jti`，每次受保护请求都重新读取数据库用户状态和最新角色。
 - Spring Security 无状态过滤链、显式 CORS 白名单和统一 JSON 401/403。
 - 当前用户资料和昵称修改；响应不返回密码哈希、内部状态或数据库实体。
-- Vue 登录、注册、认证占位首页和个人资料页；Pinia 会话恢复、Axios Token 注入、401 单次清理跳转和前端无状态退出。
+- Vue 登录、注册、认证占位首页和个人资料页；Pinia 会话恢复、Axios Token 注入、按 Token 与内存 generation 归属隔离异步认证结果和 401 单次清理跳转，以及前端无状态退出。
 - 保留 V0.1 健康检查、OpenAPI、统一响应、异常处理及无默认 Spring 密码日志基线。
 
 V0.2 提供以下认证接口：
@@ -114,10 +114,10 @@ V0.3 课程与进度尚未实现；题库、错题、AI 导师、正式仪表盘
 2026-08-08 使用上述工具链重新实际完成：
 
 ```text
-mvn clean test         -> exit 0，BUILD SUCCESS，161/161 测试通过
-mvn clean package      -> exit 0，BUILD SUCCESS，161/161 测试通过并生成可执行 JAR
+mvn clean test         -> exit 0，BUILD SUCCESS，172/172 测试通过
+mvn clean package      -> exit 0，BUILD SUCCESS，172/172 测试通过并生成可执行 JAR
 npm ci                 -> exit 0
-npm run test:unit      -> exit 0，49/49 测试通过
+npm run test:unit      -> exit 0，63/63 测试通过
 npm run type-check     -> exit 0
 npm run build          -> exit 0
 GET  /api/v1/system/health       -> HTTP 200
@@ -126,9 +126,11 @@ POST /api/v1/auth/register       -> HTTP 201
 POST /api/v1/auth/login          -> HTTP 200
 GET  /api/v1/users/me            -> HTTP 200
 PATCH /api/v1/users/me/nickname  -> HTTP 200
+POST over-72-byte registration   -> HTTP 400
+POST over-72-byte login          -> HTTP 400（存在/不存在邮箱一致）
 ```
 
-Flyway 已在全新、隔离的 MySQL 8.4.7 空数据库上依次应用 V1、V2。运行验证还确认 BCrypt、JWT 最小声明、错误密码与不存在邮箱均返回 401、禁用用户旧 Token 返回 401，以及每个受保护请求重新查询身份。验证后临时实例、监听器和数据目录均已清理，已安装的 `MySQL84` 服务保持原状态和 PID。
+Flyway 已在全新、隔离的 MySQL 8.4.7 空数据库上依次应用 V1、V2。运行验证还确认 72 UTF-8 字节密码可注册并登录、73 字节密码在注册和登录边界稳定拒绝、BCrypt 与 JWT 最小声明、错误密码与不存在邮箱均返回 401、禁用用户旧 Token 返回 401，以及每个受保护请求重新查询身份。验证后临时实例、监听器和数据目录均已清理，已安装的 `MySQL84` 服务保持原状态和 PID。
 
 ## 文档入口
 

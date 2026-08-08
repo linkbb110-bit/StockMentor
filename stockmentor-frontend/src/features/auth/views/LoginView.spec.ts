@@ -31,9 +31,9 @@ describe('LoginView', () => {
   })
 
   it('submits a password snapshot, clears the field, disables while pending, and navigates', async () => {
-    let finishLogin: (() => void) | undefined
+    let finishLogin: ((applied: boolean) => void) | undefined
     mocks.login.mockReturnValue(
-      new Promise<void>((resolve) => {
+      new Promise<boolean>((resolve) => {
         finishLogin = resolve
       }),
     )
@@ -56,11 +56,26 @@ describe('LoginView', () => {
     expect(wrapper.get('[data-testid="login-submit"]').attributes('disabled')).toBeDefined()
     expect(wrapper.get('[data-testid="login-submit"]').text()).toContain('登录中')
 
-    finishLogin?.()
+    finishLogin?.(true)
     await flushPromises()
 
     expect(mocks.routerPush).toHaveBeenCalledWith('/dashboard')
     expect(wrapper.get('[data-testid="login-submit"]').attributes('disabled')).toBeUndefined()
+  })
+
+  it('does not navigate when its successful login response no longer owns authentication', async () => {
+    mocks.login.mockResolvedValue(false)
+    const wrapper = mount(LoginView, {
+      global: { stubs: { RouterLink: routerLinkStub } },
+    })
+
+    await wrapper.get('#login-email').setValue('learner@example.com')
+    await wrapper.get('#login-password').setValue('study123')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    expect(mocks.routerPush).not.toHaveBeenCalled()
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
   })
 
   it('renders only a safe public error and never the raw error or stack', async () => {
@@ -117,6 +132,52 @@ describe('LoginView', () => {
 
     expect(mocks.login).not.toHaveBeenCalled()
     expect(wrapper.get('[role="alert"]').text()).toContain('邮箱')
+  })
+
+  it('submits a normalized-254-character email with surrounding spaces intact', async () => {
+    const normalizedEmail = `${'a'.repeat(64)}@${'b'.repeat(63)}.${'c'.repeat(63)}.${'d'.repeat(61)}`
+    const rawEmail = ` ${normalizedEmail} `
+    expect(normalizedEmail).toHaveLength(254)
+    mocks.login.mockResolvedValue(true)
+    const wrapper = mount(LoginView, {
+      global: { stubs: { RouterLink: routerLinkStub } },
+    })
+
+    expect(wrapper.get('#login-email').attributes('maxlength')).toBeUndefined()
+    await wrapper.get('#login-email').setValue(rawEmail)
+    await wrapper.get('#login-password').setValue('study123')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    expect(mocks.login).toHaveBeenCalledWith({ email: rawEmail, password: 'study123' })
+  })
+
+  it('accepts exactly 72 UTF-8 password bytes and rejects more than 72 bytes locally', async () => {
+    const exactLimitPassword = `a1${'学'.repeat(23)}x`
+    const aboveLimitPassword = `${exactLimitPassword}x`
+    expect(new TextEncoder().encode(exactLimitPassword)).toHaveLength(72)
+    expect(new TextEncoder().encode(aboveLimitPassword)).toHaveLength(73)
+    mocks.login.mockResolvedValue(true)
+    const wrapper = mount(LoginView, {
+      global: { stubs: { RouterLink: routerLinkStub } },
+    })
+
+    await wrapper.get('#login-email').setValue('learner@example.com')
+    await wrapper.get('#login-password').setValue(exactLimitPassword)
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    expect(mocks.login).toHaveBeenCalledWith({
+      email: 'learner@example.com',
+      password: exactLimitPassword,
+    })
+
+    mocks.login.mockClear()
+    await wrapper.get('#login-password').setValue(aboveLimitPassword)
+    await wrapper.get('form').trigger('submit')
+
+    expect(mocks.login).not.toHaveBeenCalled()
+    expect(wrapper.get('[role="alert"]').text()).toContain('72')
   })
 
   it('shows the registration link and investment-education-only notice', () => {

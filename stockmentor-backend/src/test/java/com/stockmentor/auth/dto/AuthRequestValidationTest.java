@@ -8,6 +8,7 @@ import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
 import jakarta.validation.ValidatorFactory;
+import java.nio.charset.StandardCharsets;
 import java.util.Set;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -15,6 +16,11 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 
 class AuthRequestValidationTest {
+
+    private static final String EXACT_BCRYPT_LIMIT_PASSWORD =
+            "a1" + "学".repeat(23) + "x";
+    private static final String ABOVE_BCRYPT_LIMIT_PASSWORD =
+            EXACT_BCRYPT_LIMIT_PASSWORD + "x";
 
     private static ValidatorFactory validatorFactory;
     private static Validator validator;
@@ -61,6 +67,42 @@ class AuthRequestValidationTest {
 
         assertThat(request.password()).hasSize(65);
         assertThat(violatedProperties(request)).containsExactly("password");
+    }
+
+    @Test
+    void authenticationRequestsAcceptExactly72Utf8PasswordBytes() {
+        RegisterRequest registerRequest = new RegisterRequest(
+                "student@example.com",
+                EXACT_BCRYPT_LIMIT_PASSWORD,
+                "学习投资"
+        );
+        LoginRequest loginRequest = new LoginRequest(
+                "student@example.com",
+                EXACT_BCRYPT_LIMIT_PASSWORD
+        );
+
+        assertThat(EXACT_BCRYPT_LIMIT_PASSWORD.getBytes(StandardCharsets.UTF_8))
+                .hasSize(72);
+        assertThat(validator.validate(registerRequest)).isEmpty();
+        assertThat(validator.validate(loginRequest)).isEmpty();
+    }
+
+    @Test
+    void authenticationRequestsRejectMoreThan72Utf8PasswordBytes() {
+        RegisterRequest registerRequest = new RegisterRequest(
+                "student@example.com",
+                ABOVE_BCRYPT_LIMIT_PASSWORD,
+                "学习投资"
+        );
+        LoginRequest loginRequest = new LoginRequest(
+                "student@example.com",
+                ABOVE_BCRYPT_LIMIT_PASSWORD
+        );
+
+        assertThat(ABOVE_BCRYPT_LIMIT_PASSWORD.getBytes(StandardCharsets.UTF_8))
+                .hasSize(73);
+        assertThat(violatedProperties(registerRequest)).containsExactly("password");
+        assertThat(violatedProperties(loginRequest)).containsExactly("password");
     }
 
     @Test

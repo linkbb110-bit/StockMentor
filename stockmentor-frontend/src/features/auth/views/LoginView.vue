@@ -4,6 +4,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 import { useAuthStore } from '../stores/authStore'
+import { isValidLoginPassword } from '../validation/passwordPolicy'
 
 const authStore = useAuthStore()
 const router = useRouter()
@@ -34,8 +35,8 @@ const validate = (): string | null => {
   if (normalizedEmail.length > 254) {
     return '邮箱不能超过 254 个字符'
   }
-  if (password.value.length < 8 || password.value.length > 64) {
-    return '密码长度须为 8–64 个字符'
+  if (!isValidLoginPassword(password.value)) {
+    return '密码须为 8–64 个字符，且不得超过 72 个 UTF-8 字节'
   }
 
   return null
@@ -61,8 +62,10 @@ const submit = async (): Promise<void> => {
   pending.value = true
 
   try {
-    await authStore.login(payload)
-    await router.push('/dashboard')
+    const applied = await authStore.login(payload)
+    if (applied) {
+      await router.push('/dashboard')
+    }
   } catch (error: unknown) {
     errorMessage.value =
       publicErrorCode(error) === 'AUTH_INVALID_CREDENTIALS'
@@ -93,7 +96,6 @@ const submit = async (): Promise<void> => {
             name="email"
             inputmode="email"
             autocomplete="email"
-            maxlength="254"
             required
           />
         </div>

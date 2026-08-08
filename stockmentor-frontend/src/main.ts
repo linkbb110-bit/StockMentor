@@ -16,11 +16,12 @@ app.use(pinia)
 const authStore = useAuthStore(pinia)
 configureUnauthorizedHandler(
   createAuthenticationFailureHandler({
-    clearAuthentication: () => authStore.clearSession(),
+    clearAuthentication: (ownership) => authStore.clearSessionIfOwned(ownership),
     currentPath: () => router.currentRoute.value.path,
     isInitialized: () => authStore.initialized,
     redirectToLogin: () => router.replace('/login'),
   }),
+  () => authStore.authenticationOwnership,
 )
 
 app.use(router)

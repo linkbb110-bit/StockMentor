@@ -30,7 +30,7 @@ Servlet Container
 - `SecurityConfigTest.java` 验证公开/受保护路径、统一 401/403、允许来源预检和非白名单来源拒绝。
 - `JwtAuthenticationFilterTest.java` 验证 Bearer 格式、SecurityContext 写入/清理和每请求身份重载。
 - `SecurityUserServiceTest.java` 验证有效、禁用和不存在用户的内部分类。
-- 前端 `stockmentor-frontend/src/api/http.spec.ts` 验证登录 401 不触发循环，而受保护请求 401 只清理并跳转一次。
+- 前端 `stockmentor-frontend/src/api/http.spec.ts` 验证登录 401 不触发循环；受保护请求 401 仅在请求捕获的 Token + generation 仍属当前会话时清理，并且只在同一归属内合并为一次跳转。
 
 ## 常见错误与面试追问
 

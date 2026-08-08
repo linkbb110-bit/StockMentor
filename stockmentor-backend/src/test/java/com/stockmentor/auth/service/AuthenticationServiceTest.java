@@ -28,6 +28,7 @@ import com.stockmentor.user.repository.UserRepository;
 import com.stockmentor.user.service.NicknameNormalizer;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.nio.charset.StandardCharsets;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -51,6 +52,10 @@ class AuthenticationServiceTest {
     private static final String TOKEN = "signed-jwt";
     private static final String NORMALIZED_EMAIL = "test@example.com";
     private static final String NORMALIZED_NICKNAME = "学习投资";
+    private static final String EXACT_BCRYPT_LIMIT_PASSWORD =
+            "a1" + "学".repeat(23) + "x";
+    private static final String ABOVE_BCRYPT_LIMIT_PASSWORD =
+            EXACT_BCRYPT_LIMIT_PASSWORD + "x";
 
     @Mock
     private UserRepository userRepository;
@@ -150,6 +155,44 @@ class AuthenticationServiceTest {
     }
 
     @Test
+    void registerAcceptsAndHashesExactly72Utf8PasswordBytes() {
+        assertThat(EXACT_BCRYPT_LIMIT_PASSWORD.getBytes(StandardCharsets.UTF_8))
+                .hasSize(72);
+        stubSuccessfulRegistration();
+
+        service.register(new RegisterRequest(
+                NORMALIZED_EMAIL,
+                EXACT_BCRYPT_LIMIT_PASSWORD,
+                NORMALIZED_NICKNAME
+        ));
+
+        ArgumentCaptor<UserEntity> savedUserCaptor =
+                ArgumentCaptor.forClass(UserEntity.class);
+        verify(userRepository).save(savedUserCaptor.capture());
+        assertThat(passwordEncoder.matches(
+                EXACT_BCRYPT_LIMIT_PASSWORD,
+                savedUserCaptor.getValue().getPasswordHash()
+        )).isTrue();
+    }
+
+    @Test
+    void registerRejectsMoreThan72Utf8PasswordBytesBeforePersistenceOrBcrypt() {
+        assertThat(ABOVE_BCRYPT_LIMIT_PASSWORD.getBytes(StandardCharsets.UTF_8))
+                .hasSize(73);
+
+        assertBusinessError(
+                () -> service.register(new RegisterRequest(
+                        NORMALIZED_EMAIL,
+                        ABOVE_BCRYPT_LIMIT_PASSWORD,
+                        NORMALIZED_NICKNAME
+                )),
+                ErrorCode.VALIDATION_FAILED
+        );
+
+        verifyNoInteractions(userRepository, jwtTokenProvider);
+    }
+
+    @Test
     void registerResponseDoesNotExposePasswordOrInternalStatus() {
         stubSuccessfulRegistration();
         AuthResponse response = service.register(new RegisterRequest(
@@ -189,6 +232,28 @@ class AuthenticationServiceTest {
         passwordEncoderBean.setAccessible(true);
         assertThat(passwordEncoderBean.invoke(new SecurityBaselineConfig()))
                 .isInstanceOf(BCryptPasswordEncoder.class);
+    }
+
+    @Test
+    void resolvedSpringSecurityBcryptRejectsOver72ByteEncodeButMatchesItsPrefix() {
+        assertThat(EXACT_BCRYPT_LIMIT_PASSWORD.getBytes(StandardCharsets.UTF_8))
+                .hasSize(72);
+        assertThat(ABOVE_BCRYPT_LIMIT_PASSWORD.getBytes(StandardCharsets.UTF_8))
+                .hasSize(73);
+
+        String exactLimitHash = passwordEncoder.encode(EXACT_BCRYPT_LIMIT_PASSWORD);
+
+        assertThat(passwordEncoder.matches(
+                EXACT_BCRYPT_LIMIT_PASSWORD,
+                exactLimitHash
+        )).isTrue();
+        assertThatThrownBy(() -> passwordEncoder.encode(ABOVE_BCRYPT_LIMIT_PASSWORD))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("password cannot be more than 72 bytes");
+        assertThat(passwordEncoder.matches(
+                ABOVE_BCRYPT_LIMIT_PASSWORD,
+                exactLimitHash
+        )).isTrue();
     }
 
     @Test
@@ -317,6 +382,47 @@ class AuthenticationServiceTest {
     }
 
     @Test
+    void loginAcceptsExactly72Utf8PasswordBytes() {
+        assertThat(EXACT_BCRYPT_LIMIT_PASSWORD.getBytes(StandardCharsets.UTF_8))
+                .hasSize(72);
+        UserEntity user = activeUser(EXACT_BCRYPT_LIMIT_PASSWORD);
+        when(userRepository.findByNormalizedEmail(NORMALIZED_EMAIL))
+                .thenReturn(Optional.of(user));
+        when(userRepository.updateLastLoginAt(
+                eq(USER_ID),
+                any(LocalDateTime.class)
+        )).thenReturn(true);
+        when(jwtTokenProvider.issue(eq(USER_ID), any(Instant.class)))
+                .thenReturn(TOKEN);
+        when(jwtTokenProvider.expirationSeconds())
+                .thenReturn(EXPIRATION_SECONDS);
+
+        AuthResponse response = service.login(new LoginRequest(
+                NORMALIZED_EMAIL,
+                EXACT_BCRYPT_LIMIT_PASSWORD
+        ));
+
+        assertThat(response.accessToken()).isEqualTo(TOKEN);
+    }
+
+    @Test
+    void loginRejectsMoreThan72Utf8PasswordBytesBeforeAccountLookupOrBcrypt() {
+        assertThat(ABOVE_BCRYPT_LIMIT_PASSWORD.getBytes(StandardCharsets.UTF_8))
+                .hasSize(73);
+
+        assertCredentialFailure(() -> service.login(new LoginRequest(
+                NORMALIZED_EMAIL,
+                ABOVE_BCRYPT_LIMIT_PASSWORD
+        )));
+        assertCredentialFailure(() -> service.login(new LoginRequest(
+                "missing@example.com",
+                ABOVE_BCRYPT_LIMIT_PASSWORD
+        )));
+
+        verifyNoInteractions(userRepository, jwtTokenProvider);
+    }
+
+    @Test
     void wrongPasswordUsesTheUniformCredentialFailureAndDoesNotIssueToken() {
         when(userRepository.findByNormalizedEmail(NORMALIZED_EMAIL))
                 .thenReturn(Optional.of(activeUser()));
@@ -410,10 +516,14 @@ class AuthenticationServiceTest {
     }
 
     private UserEntity activeUser() {
+        return activeUser(PLAINTEXT_PASSWORD);
+    }
+
+    private UserEntity activeUser(String plaintextPassword) {
         UserEntity user = new UserEntity();
         user.setId(USER_ID);
         user.setEmail(NORMALIZED_EMAIL);
-        user.setPasswordHash(passwordEncoder.encode(PLAINTEXT_PASSWORD));
+        user.setPasswordHash(passwordEncoder.encode(plaintextPassword));
         user.setNickname(NORMALIZED_NICKNAME);
         user.setRole(UserRole.USER);
         user.setStatus(UserStatus.ACTIVE);

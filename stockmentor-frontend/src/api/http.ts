@@ -1,28 +1,57 @@
 import axios from 'axios'
 
 import { authSession } from '../features/auth/session/authSession'
+import type { AuthenticationOwnership } from '../features/auth/types/auth'
 
-type UnauthorizedHandler = () => unknown
+type UnauthorizedHandler = (ownership: AuthenticationOwnership) => unknown
+type CurrentAuthentication = () => AuthenticationOwnership
 
 interface AuthenticationFailureActions {
-  clearAuthentication: () => void
+  clearAuthentication: (ownership: AuthenticationOwnership) => boolean | void
   currentPath: () => string
   isInitialized: () => boolean
   redirectToLogin: () => unknown
 }
 
-let unauthorizedHandler: UnauthorizedHandler = () => authSession.clear()
-let unauthorizedHandling: Promise<void> | null = null
+interface AuthenticationRequestConfig {
+  stockmentorAuthentication?: AuthenticationOwnership
+}
 
-export const configureUnauthorizedHandler = (handler: UnauthorizedHandler): void => {
+interface UnauthorizedHandling {
+  ownership: AuthenticationOwnership
+  promise: Promise<void>
+}
+
+let currentAuthentication: CurrentAuthentication = () => ({
+  accessToken: authSession.load().accessToken,
+  generation: 0,
+})
+let unauthorizedHandler: UnauthorizedHandler = (ownership) => {
+  if (currentAuthentication().accessToken === ownership.accessToken) {
+    authSession.clear()
+  }
+}
+const unauthorizedHandlings: UnauthorizedHandling[] = []
+
+export const configureUnauthorizedHandler = (
+  handler: UnauthorizedHandler,
+  authentication?: CurrentAuthentication,
+): void => {
   unauthorizedHandler = handler
+  if (authentication) {
+    currentAuthentication = authentication
+  }
 }
 
 export const createAuthenticationFailureHandler = (
   actions: AuthenticationFailureActions,
 ): UnauthorizedHandler =>
-  () => {
-    actions.clearAuthentication()
+  (ownership) => {
+    const cleared = actions.clearAuthentication(ownership)
+
+    if (cleared === false) {
+      return
+    }
 
     if (!actions.isInitialized() || actions.currentPath() === '/login') {
       return
@@ -52,16 +81,20 @@ const isLoginInvalidCredentialsError = (error: unknown): boolean =>
   requestPath(error.config?.url) === '/auth/login' &&
   publicErrorCode(error.response?.data) === 'AUTH_INVALID_CREDENTIALS'
 
-const startUnauthorizedHandling = (): void => {
-  if (unauthorizedHandling) {
+const sameOwnership = (
+  left: AuthenticationOwnership,
+  right: AuthenticationOwnership,
+): boolean =>
+  left.generation === right.generation && left.accessToken === right.accessToken
+
+const startUnauthorizedHandling = (ownership: AuthenticationOwnership): void => {
+  if (unauthorizedHandlings.some((handling) => sameOwnership(handling.ownership, ownership))) {
     return
   }
 
-  unauthorizedHandling = Promise.resolve()
-
   let result: unknown
   try {
-    result = unauthorizedHandler()
+    result = unauthorizedHandler(ownership)
   } catch {
     result = undefined
   }
@@ -70,12 +103,34 @@ const startUnauthorizedHandling = (): void => {
     () => undefined,
     () => undefined,
   )
-  unauthorizedHandling = currentHandling
+  const handling = { ownership, promise: currentHandling }
+  unauthorizedHandlings.push(handling)
   void currentHandling.finally(() => {
-    if (unauthorizedHandling === currentHandling) {
-      unauthorizedHandling = null
+    const index = unauthorizedHandlings.indexOf(handling)
+    if (index >= 0) {
+      unauthorizedHandlings.splice(index, 1)
     }
   })
+}
+
+const bearerToken = (authorization: unknown): string | null => {
+  if (typeof authorization !== 'string') {
+    return null
+  }
+
+  const match = /^Bearer (.+)$/.exec(authorization)
+  return match?.[1] ?? null
+}
+
+const requestAuthentication = (error: unknown): AuthenticationOwnership | null => {
+  if (!axios.isAxiosError(error)) {
+    return null
+  }
+
+  return (
+    (error.config as (typeof error.config & AuthenticationRequestConfig) | undefined)
+      ?.stockmentorAuthentication ?? null
+  )
 }
 
 const http = axios.create({
@@ -88,9 +143,15 @@ const http = axios.create({
 })
 
 http.interceptors.request.use((config) => {
+  const ownership = currentAuthentication()
   const { accessToken } = authSession.load()
   if (accessToken) {
     config.headers.set('Authorization', `Bearer ${accessToken}`)
+  }
+
+  ;(config as typeof config & AuthenticationRequestConfig).stockmentorAuthentication = {
+    accessToken: bearerToken(config.headers.get('Authorization')),
+    generation: ownership.generation,
   }
 
   return config
@@ -99,12 +160,15 @@ http.interceptors.request.use((config) => {
 http.interceptors.response.use(
   (response) => response,
   (error: unknown) => {
+    const failedAuthentication = requestAuthentication(error)
     if (
       axios.isAxiosError(error) &&
       error.response?.status === 401 &&
-      !isLoginInvalidCredentialsError(error)
+      !isLoginInvalidCredentialsError(error) &&
+      failedAuthentication !== null &&
+      sameOwnership(failedAuthentication, currentAuthentication())
     ) {
-      startUnauthorizedHandling()
+      startUnauthorizedHandling(failedAuthentication)
     }
 
     return Promise.reject(error)

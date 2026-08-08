@@ -105,6 +105,18 @@ describe('ProfileView', () => {
     expect(wrapper.text()).not.toContain('PRIVATE_PROFILE_STACK')
   })
 
+  it('does not restore profile feedback from a stale successful nickname response', async () => {
+    mocks.updateNickname.mockResolvedValue(null)
+    const wrapper = mount(ProfileView)
+    await wrapper.get('#profile-nickname').setValue('长期学习者')
+
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    expect(wrapper.find('[role="status"]').exists()).toBe(false)
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+  })
+
   it('maps an invalid nickname code to the approved public rule without raw details', async () => {
     const invalidNickname = Object.assign(new Error('private validation internals'), {
       isAxiosError: true,

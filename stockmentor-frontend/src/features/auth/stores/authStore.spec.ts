@@ -66,6 +66,32 @@ const apiResponse = <T>(data: T) => ({
   },
 })
 
+const deferred = <T>() => {
+  let resolvePromise: (value: T) => void = () => undefined
+  let rejectPromise: (reason?: unknown) => void = () => undefined
+  const promise = new Promise<T>((resolve, reject) => {
+    resolvePromise = resolve
+    rejectPromise = reject
+  })
+
+  return { promise, resolve: resolvePromise, reject: rejectPromise }
+}
+
+const otherUser: CurrentUser = {
+  id: 84,
+  email: 'newer@example.com',
+  nickname: 'Newer Learner',
+  role: 'USER',
+  createdAt: '2026-08-08T18:00:00',
+}
+
+const otherAuthResponse: AuthResponse = {
+  accessToken: 'newer-access-token',
+  tokenType: 'Bearer',
+  expiresIn: 3600,
+  user: otherUser,
+}
+
 describe('authStore', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -106,6 +132,51 @@ describe('authStore', () => {
     expect(store.accessToken).toBe('access-token')
     expect(store.currentUser).toEqual(currentUser)
     expect(store.isAuthenticated).toBe(true)
+  })
+
+  it('lets the newer login win when an older login succeeds last', async () => {
+    const olderLogin = deferred<ReturnType<typeof apiResponse<AuthResponse>>>()
+    const newerLogin = deferred<ReturnType<typeof apiResponse<AuthResponse>>>()
+    mocks.login.mockReturnValueOnce(olderLogin.promise).mockReturnValueOnce(newerLogin.promise)
+    const store = useAuthStore()
+
+    const olderResult = store.login({ email: currentUser.email, password: 'safe-password' })
+    const newerResult = store.login({ email: otherUser.email, password: 'safe-password' })
+    newerLogin.resolve(apiResponse(otherAuthResponse))
+
+    await expect(newerResult).resolves.toBe(true)
+    olderLogin.resolve(apiResponse(authResponse))
+    await expect(olderResult).resolves.toBe(false)
+
+    expect(mocks.saveSession).toHaveBeenCalledOnce()
+    expect(mocks.saveSession).toHaveBeenCalledWith('newer-access-token', otherUser)
+    expect(store.accessToken).toBe('newer-access-token')
+    expect(store.currentUser).toEqual(otherUser)
+  })
+
+  it('does not let a registration restore state after logout and relogin', async () => {
+    const olderRegistration = deferred<ReturnType<typeof apiResponse<AuthResponse>>>()
+    mocks.register.mockReturnValue(olderRegistration.promise)
+    mocks.login.mockResolvedValue(apiResponse(otherAuthResponse))
+    const store = useAuthStore()
+
+    const registrationResult = store.register({
+      email: currentUser.email,
+      password: 'safe-password',
+      nickname: currentUser.nickname,
+    })
+    store.logout()
+    await expect(
+      store.login({ email: otherUser.email, password: 'safe-password' }),
+    ).resolves.toBe(true)
+    mocks.saveSession.mockClear()
+
+    olderRegistration.resolve(apiResponse(authResponse))
+    await expect(registrationResult).resolves.toBe(false)
+
+    expect(mocks.saveSession).not.toHaveBeenCalled()
+    expect(store.accessToken).toBe('newer-access-token')
+    expect(store.currentUser).toEqual(otherUser)
   })
 
   it('restores the Token and validates the latest user with /users/me', async () => {
@@ -155,6 +226,48 @@ describe('authStore', () => {
     expect(mocks.updateNickname).toHaveBeenCalledWith('Latest Learner')
     expect(mocks.saveSession).toHaveBeenCalledWith('access-token', refreshedUser)
     expect(store.currentUser).toEqual(refreshedUser)
+  })
+
+  it('ignores a stale current-user response after logout and relogin', async () => {
+    mocks.login.mockResolvedValueOnce(apiResponse(authResponse))
+    const staleCurrentUser = deferred<ReturnType<typeof apiResponse<CurrentUser>>>()
+    mocks.getCurrentUser.mockReturnValue(staleCurrentUser.promise)
+    const store = useAuthStore()
+    await store.login({ email: currentUser.email, password: 'safe-password' })
+
+    const currentUserResult = store.loadCurrentUser()
+    store.logout()
+    mocks.login.mockResolvedValueOnce(apiResponse(otherAuthResponse))
+    await store.login({ email: otherUser.email, password: 'safe-password' })
+    mocks.saveSession.mockClear()
+
+    staleCurrentUser.resolve(apiResponse(refreshedUser))
+    await expect(currentUserResult).resolves.toBeNull()
+
+    expect(mocks.saveSession).not.toHaveBeenCalled()
+    expect(store.accessToken).toBe('newer-access-token')
+    expect(store.currentUser).toEqual(otherUser)
+  })
+
+  it('ignores a stale nickname response after logout and relogin', async () => {
+    mocks.login.mockResolvedValueOnce(apiResponse(authResponse))
+    const staleNickname = deferred<ReturnType<typeof apiResponse<CurrentUser>>>()
+    mocks.updateNickname.mockReturnValue(staleNickname.promise)
+    const store = useAuthStore()
+    await store.login({ email: currentUser.email, password: 'safe-password' })
+
+    const nicknameResult = store.updateNickname('Latest Learner')
+    store.logout()
+    mocks.login.mockResolvedValueOnce(apiResponse(otherAuthResponse))
+    await store.login({ email: otherUser.email, password: 'safe-password' })
+    mocks.saveSession.mockClear()
+
+    staleNickname.resolve(apiResponse(refreshedUser))
+    await expect(nicknameResult).resolves.toBeNull()
+
+    expect(mocks.saveSession).not.toHaveBeenCalled()
+    expect(store.accessToken).toBe('newer-access-token')
+    expect(store.currentUser).toEqual(otherUser)
   })
 
   it('logs out locally by clearing store state and the saved session', async () => {

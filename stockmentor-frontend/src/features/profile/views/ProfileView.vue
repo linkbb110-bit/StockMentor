@@ -58,6 +58,9 @@ const save = async (): Promise<void> => {
 
   try {
     const updatedUser = await authStore.updateNickname(submittedNickname)
+    if (!updatedUser) {
+      return
+    }
     nickname.value = updatedUser.nickname
     successMessage.value = '昵称已更新'
   } catch (error: unknown) {

@@ -32,14 +32,14 @@ Authorization: Bearer <token>
 
 ## 前端会话
 
-`stockmentor-frontend/src/features/auth/session/authSession.ts` 只使用 `sessionStorage` 的 `stockmentor.accessToken` 和 `stockmentor.currentUser`。`stockmentor-frontend/src/api/http.ts` 注入 Bearer Token；本地退出会清除这两个键。Token 被窃取仍可在到期前被使用，因此 HTTPS、日志脱敏和较短有效期仍是必要边界。
+`stockmentor-frontend/src/features/auth/session/authSession.ts` 只使用 `sessionStorage` 的 `stockmentor.accessToken` 和 `stockmentor.currentUser`。Pinia 另持有不落盘、单调递增的 authentication generation；登录/注册意图和清理都会推进 generation。`stockmentor-frontend/src/api/http.ts` 为请求捕获实际 Bearer Token 与 generation，只有该归属仍等于当前会话时才处理 401，同一归属的并发 401 才会合并。本地退出会清除两个持久键并推进 generation，使旧异步成功或旧 401 失去修改新会话的资格。Token 被窃取仍可在到期前被使用，因此 HTTPS、日志脱敏和较短有效期仍是必要边界。
 
 ## 实际测试证据
 
 - `JwtTokenProviderTest.java` 验证 HS256、最小声明、唯一 `jti`、过期、错误签名、篡改和非法 `sub`。
 - `JwtAuthenticationFilterTest.java` 验证数据库身份重载、禁用/删除用户、401 映射和完整 Token 不进入日志。
 - `JwtPropertiesTest.java` 验证密钥和过期配置边界。
-- `authSession.spec.ts` 验证只保存允许字段、不使用 `localStorage`；`http.spec.ts` 验证 Token 注入和 401 清理。
+- `authSession.spec.ts` 验证只保存允许字段、不使用 `localStorage`；`authStore.spec.ts` 验证旧认证成功、资料和昵称结果不能覆盖新会话；`http.spec.ts` 验证 Token 注入、Token + generation 所有权和按所有权合并 401。
 
 ## 常见错误与面试追问
 

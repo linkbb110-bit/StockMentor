@@ -2,6 +2,7 @@ package com.stockmentor.auth.service;
 
 import com.stockmentor.auth.dto.LoginRequest;
 import com.stockmentor.auth.dto.RegisterRequest;
+import com.stockmentor.auth.validation.PasswordPolicy;
 import com.stockmentor.auth.vo.AuthResponse;
 import com.stockmentor.common.exception.BusinessException;
 import com.stockmentor.common.exception.ErrorCode;
@@ -45,6 +46,10 @@ public class AuthenticationService {
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
+        requireBcryptCompatibility(
+                request.password(),
+                ErrorCode.VALIDATION_FAILED
+        );
         String normalizedEmail = emailNormalizer.normalize(request.email());
         String normalizedNickname =
                 nicknameNormalizer.normalize(request.nickname());
@@ -84,6 +89,10 @@ public class AuthenticationService {
     }
 
     public AuthResponse login(LoginRequest request) {
+        requireBcryptCompatibility(
+                request.password(),
+                ErrorCode.AUTH_INVALID_CREDENTIALS
+        );
         String normalizedEmail = emailNormalizer.normalize(request.email());
         UserEntity user = userRepository.findByNormalizedEmail(normalizedEmail)
                 .orElseThrow(() ->
@@ -120,6 +129,15 @@ public class AuthenticationService {
                 jwtTokenProvider.expirationSeconds(),
                 toCurrentUser(user)
         );
+    }
+
+    private void requireBcryptCompatibility(
+            String password,
+            ErrorCode errorCode
+    ) {
+        if (!PasswordPolicy.isBcryptCompatible(password)) {
+            throw new BusinessException(errorCode);
+        }
     }
 
     private CurrentUserResponse toCurrentUser(UserEntity user) {

@@ -4,6 +4,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 import { useAuthStore } from '../stores/authStore'
+import { isValidRegistrationPassword } from '../validation/passwordPolicy'
 
 const authStore = useAuthStore()
 const router = useRouter()
@@ -50,13 +51,8 @@ const validate = (): string | null => {
     return nicknameRuleMessage
   }
 
-  if (
-    password.value.length < 8 ||
-    password.value.length > 64 ||
-    !/[A-Za-z]/.test(password.value) ||
-    !/[0-9]/.test(password.value)
-  ) {
-    return '密码须为 8–64 个字符，并至少包含一个英文字母和一个数字'
+  if (!isValidRegistrationPassword(password.value)) {
+    return '密码须为 8–64 个字符、不得超过 72 个 UTF-8 字节，并至少包含一个英文字母和一个数字'
   }
   if (password.value !== confirmPassword.value) {
     return '两次输入的密码不一致'
@@ -87,8 +83,10 @@ const submit = async (): Promise<void> => {
   pending.value = true
 
   try {
-    await authStore.register(payload)
-    await router.push('/dashboard')
+    const applied = await authStore.register(payload)
+    if (applied) {
+      await router.push('/dashboard')
+    }
   } catch (error: unknown) {
     const code = publicErrorCode(error)
     if (code === 'USER_EMAIL_ALREADY_EXISTS') {
@@ -123,7 +121,6 @@ const submit = async (): Promise<void> => {
             name="email"
             inputmode="email"
             autocomplete="email"
-            maxlength="254"
             required
           />
         </div>
@@ -155,7 +152,7 @@ const submit = async (): Promise<void> => {
             required
           />
           <p id="password-rule" class="hint" data-testid="password-rule">
-            8–64 个字符，至少包含一个英文字母和一个数字；不会自动去除首尾空格。
+            8–64 个字符且不超过 72 个 UTF-8 字节，至少包含一个英文字母和一个数字；不会自动去除首尾空格。
           </p>
         </div>
 

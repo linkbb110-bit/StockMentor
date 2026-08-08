@@ -5,6 +5,7 @@ import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -67,6 +68,10 @@ class AuthControllerTest {
     private static final String TEST_PASSWORD = "test-only9";
     private static final String WRONG_PASSWORD = "wrong-only9";
     private static final String TEST_TOKEN = "test.jwt.placeholder";
+    private static final String EXACT_BCRYPT_LIMIT_PASSWORD =
+            "a1" + "学".repeat(23) + "x";
+    private static final String ABOVE_BCRYPT_LIMIT_PASSWORD =
+            EXACT_BCRYPT_LIMIT_PASSWORD + "x";
     private static final String REGISTER_LOG_PASSWORD =
             "REGISTER_PASSWORD9_SENTINEL_ALPHA";
     private static final String REGISTER_LOG_TOKEN =
@@ -162,6 +167,49 @@ class AuthControllerTest {
                           "data": null
                         }
                         """, JsonCompareMode.STRICT));
+    }
+
+    @Test
+    void registrationAcceptsExactly72Utf8PasswordBytes() throws Exception {
+        assertThat(EXACT_BCRYPT_LIMIT_PASSWORD.getBytes(StandardCharsets.UTF_8))
+                .hasSize(72);
+        when(authenticationService.register(new RegisterRequest(
+                EMAIL,
+                EXACT_BCRYPT_LIMIT_PASSWORD,
+                NICKNAME
+        ))).thenReturn(successfulAuthentication());
+
+        mockMvc.perform(post(REGISTER_PATH)
+                        .characterEncoding(StandardCharsets.UTF_8)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(registerJson(
+                                EMAIL,
+                                EXACT_BCRYPT_LIMIT_PASSWORD,
+                                NICKNAME
+                        )))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    void registrationRejectsMoreThan72Utf8PasswordBytesAsStablePublic400(
+            CapturedOutput output
+    ) throws Exception {
+        assertThat(ABOVE_BCRYPT_LIMIT_PASSWORD.getBytes(StandardCharsets.UTF_8))
+                .hasSize(73);
+
+        mockMvc.perform(post(REGISTER_PATH)
+                        .characterEncoding(StandardCharsets.UTF_8)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(registerJson(
+                                EMAIL,
+                                ABOVE_BCRYPT_LIMIT_PASSWORD,
+                                NICKNAME
+                        )))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().json(validationFailureJson(), JsonCompareMode.STRICT));
+
+        verifyNoInteractions(authenticationService);
+        assertThat(output.getAll()).doesNotContain(ABOVE_BCRYPT_LIMIT_PASSWORD);
     }
 
     @Test
@@ -264,6 +312,50 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.data.user.status").doesNotExist())
                 .andExpect(jsonPath("$.data.user.deleted").doesNotExist())
                 .andExpect(content().string(not(containsString(TEST_PASSWORD))));
+    }
+
+    @Test
+    void loginAcceptsExactly72Utf8PasswordBytes() throws Exception {
+        assertThat(EXACT_BCRYPT_LIMIT_PASSWORD.getBytes(StandardCharsets.UTF_8))
+                .hasSize(72);
+        when(authenticationService.login(new LoginRequest(
+                EMAIL,
+                EXACT_BCRYPT_LIMIT_PASSWORD
+        ))).thenReturn(successfulAuthentication());
+
+        mockMvc.perform(post(LOGIN_PATH)
+                        .characterEncoding(StandardCharsets.UTF_8)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(loginJson(EMAIL, EXACT_BCRYPT_LIMIT_PASSWORD)))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void loginOver72Utf8BytesReturnsTheSamePublic400ForAnyEmail(
+            CapturedOutput output
+    ) throws Exception {
+        assertThat(ABOVE_BCRYPT_LIMIT_PASSWORD.getBytes(StandardCharsets.UTF_8))
+                .hasSize(73);
+
+        MvcResult existingEmailResult = mockMvc.perform(post(LOGIN_PATH)
+                        .characterEncoding(StandardCharsets.UTF_8)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(loginJson(EMAIL, ABOVE_BCRYPT_LIMIT_PASSWORD)))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().json(validationFailureJson(), JsonCompareMode.STRICT))
+                .andReturn();
+        MvcResult missingEmailResult = mockMvc.perform(post(LOGIN_PATH)
+                        .characterEncoding(StandardCharsets.UTF_8)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(loginJson(MISSING_EMAIL, ABOVE_BCRYPT_LIMIT_PASSWORD)))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().json(validationFailureJson(), JsonCompareMode.STRICT))
+                .andReturn();
+
+        assertThat(existingEmailResult.getResponse().getContentAsString())
+                .isEqualTo(missingEmailResult.getResponse().getContentAsString());
+        verifyNoInteractions(authenticationService);
+        assertThat(output.getAll()).doesNotContain(ABOVE_BCRYPT_LIMIT_PASSWORD);
     }
 
     @Test
@@ -508,6 +600,16 @@ class AuthControllerTest {
                 {
                   "code": "USER_EMAIL_ALREADY_EXISTS",
                   "message": "该邮箱已注册",
+                  "data": null
+                }
+                """;
+    }
+
+    private String validationFailureJson() {
+        return """
+                {
+                  "code": "VALIDATION_FAILED",
+                  "message": "请求参数不合法",
                   "data": null
                 }
                 """;

@@ -16,6 +16,8 @@ const mocks = vi.hoisted(() => ({
   replace: vi.fn(),
   currentPath: '/dashboard',
   initialized: true,
+  currentAccessToken: null as string | null,
+  authenticationGeneration: 0,
 }))
 
 vi.mock('../features/auth/session/authSession', () => ({
@@ -29,6 +31,16 @@ import http, {
   configureUnauthorizedHandler,
   createAuthenticationFailureHandler,
 } from './http'
+
+interface AuthenticationOwnership {
+  accessToken: string | null
+  generation: number
+}
+
+const configureWithOwnership = configureUnauthorizedHandler as unknown as (
+  handler: (ownership: AuthenticationOwnership) => unknown,
+  currentAuthentication: () => AuthenticationOwnership,
+) => void
 
 const okAdapter = (): AxiosAdapter => async (config) => ({
   config,
@@ -57,8 +69,38 @@ const unauthorizedError = (
   return new AxiosError('Unauthorized', 'ERR_BAD_REQUEST', config, undefined, response)
 }
 
+const attachRequestConfig = (
+  error: AxiosError<ApiResponse<null>>,
+  config: InternalAxiosRequestConfig,
+): void => {
+  error.config = config
+  if (error.response) {
+    error.response.config = config
+  }
+}
+
 const rejectFromAdapter = (error: AxiosError<ApiResponse<null>>): AxiosAdapter =>
-  async () => Promise.reject(error)
+  async (config) => {
+    attachRequestConfig(error, config)
+    return Promise.reject(error)
+  }
+
+const deferredRejectionAdapter = (error: AxiosError<ApiResponse<null>>) => {
+  let rejectRequest: () => void = () => undefined
+  let markStarted: () => void = () => undefined
+  const started = new Promise<void>((resolve) => {
+    markStarted = resolve
+  })
+  const adapter: AxiosAdapter = async (config) => {
+    attachRequestConfig(error, config)
+    markStarted()
+    return new Promise((_, reject) => {
+      rejectRequest = () => reject(error)
+    })
+  }
+
+  return { adapter, started, reject: () => rejectRequest() }
+}
 
 const rejectionFrom = async (request: Promise<unknown>): Promise<unknown> =>
   request.then(
@@ -71,15 +113,21 @@ describe('authentication HTTP interceptors', () => {
     vi.resetAllMocks()
     mocks.currentPath = '/dashboard'
     mocks.initialized = true
+    mocks.currentAccessToken = null
+    mocks.authenticationGeneration = 0
     mocks.loadSession.mockReturnValue({ accessToken: null, currentUser: null })
     mocks.clearStore.mockImplementation(() => mocks.clearSession())
     mocks.replace.mockResolvedValue(undefined)
-    configureUnauthorizedHandler(
+    configureWithOwnership(
       createAuthenticationFailureHandler({
         clearAuthentication: mocks.clearStore,
         currentPath: () => mocks.currentPath,
         isInitialized: () => mocks.initialized,
         redirectToLogin: () => mocks.replace('/login'),
+      }),
+      () => ({
+        accessToken: mocks.currentAccessToken,
+        generation: mocks.authenticationGeneration,
       }),
     )
   })
@@ -179,6 +227,9 @@ describe('authentication HTTP interceptors', () => {
   })
 
   it('coalesces concurrent 401 handling into one clear and one redirect', async () => {
+    mocks.currentAccessToken = 'current-token'
+    mocks.authenticationGeneration = 4
+    mocks.loadSession.mockReturnValue({ accessToken: 'current-token', currentUser: null })
     let finishRedirect: (() => void) | undefined
     mocks.replace.mockReturnValue(
       new Promise<void>((resolve) => {
@@ -202,6 +253,76 @@ describe('authentication HTTP interceptors', () => {
     expect(mocks.clearSession).toHaveBeenCalledOnce()
     expect(mocks.replace).toHaveBeenCalledOnce()
     finishRedirect?.()
+  })
+
+  it('ignores a delayed 401 from an old Authorization Token after a newer session starts', async () => {
+    mocks.currentAccessToken = 'old-token'
+    mocks.authenticationGeneration = 7
+    mocks.loadSession.mockReturnValue({ accessToken: 'old-token', currentUser: null })
+    const originalError = unauthorizedError('/users/me', 'AUTH_INVALID_TOKEN')
+    const pending = deferredRejectionAdapter(originalError)
+
+    const request = http.get('/users/me', { adapter: pending.adapter })
+    await pending.started
+    mocks.currentAccessToken = 'new-token'
+    mocks.authenticationGeneration = 8
+    mocks.loadSession.mockReturnValue({ accessToken: 'new-token', currentUser: null })
+    pending.reject()
+
+    await expect(rejectionFrom(request)).resolves.toBe(originalError)
+    expect(mocks.clearStore).not.toHaveBeenCalled()
+    expect(mocks.clearSession).not.toHaveBeenCalled()
+    expect(mocks.replace).not.toHaveBeenCalled()
+  })
+
+  it('ignores a delayed 401 when the same Token belongs to a newer generation', async () => {
+    mocks.currentAccessToken = 'reused-token'
+    mocks.authenticationGeneration = 11
+    mocks.loadSession.mockReturnValue({ accessToken: 'reused-token', currentUser: null })
+    const originalError = unauthorizedError('/users/me', 'AUTH_INVALID_TOKEN')
+    const pending = deferredRejectionAdapter(originalError)
+
+    const request = http.get('/users/me', { adapter: pending.adapter })
+    await pending.started
+    mocks.authenticationGeneration = 12
+    pending.reject()
+
+    await expect(rejectionFrom(request)).resolves.toBe(originalError)
+    expect(mocks.clearStore).not.toHaveBeenCalled()
+    expect(mocks.replace).not.toHaveBeenCalled()
+  })
+
+  it('does not let pending old-session handling suppress a newer-session 401', async () => {
+    let finishOldRedirect: (() => void) | undefined
+    mocks.currentAccessToken = 'old-token'
+    mocks.authenticationGeneration = 20
+    mocks.loadSession.mockReturnValue({ accessToken: 'old-token', currentUser: null })
+    mocks.replace.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finishOldRedirect = resolve
+      }),
+    )
+    const oldError = unauthorizedError('/users/me', 'AUTH_INVALID_TOKEN')
+
+    await expect(
+      rejectionFrom(http.get('/users/me', { adapter: rejectFromAdapter(oldError) })),
+    ).resolves.toBe(oldError)
+    expect(mocks.clearStore).toHaveBeenCalledOnce()
+
+    mocks.currentAccessToken = 'new-token'
+    mocks.authenticationGeneration = 21
+    mocks.loadSession.mockReturnValue({ accessToken: 'new-token', currentUser: null })
+    const newError = unauthorizedError('/users/me', 'AUTH_TOKEN_EXPIRED')
+
+    await expect(
+      rejectionFrom(http.get('/users/me', { adapter: rejectFromAdapter(newError) })),
+    ).resolves.toBe(newError)
+    finishOldRedirect?.()
+    await Promise.resolve()
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(mocks.clearStore).toHaveBeenCalledTimes(2)
+    expect(mocks.replace).toHaveBeenCalledTimes(2)
   })
 
   it('rejects the original Axios error when the injected side-effect handler throws', async () => {
