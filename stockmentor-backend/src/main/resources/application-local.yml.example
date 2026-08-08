@@ -8,3 +8,11 @@ spring:
     password: ${DB_PASSWORD}
   flyway:
     enabled: ${FLYWAY_ENABLED:true}
+
+stockmentor:
+  security:
+    cors:
+      allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
+    jwt:
+      secret: ${JWT_SECRET:}
+      expiration-seconds: ${JWT_EXPIRATION:7200}

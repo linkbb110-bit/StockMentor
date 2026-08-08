@@ -4,11 +4,15 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.stockmentor.user.mapper.UserMapper;
+import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.json.JsonCompareMode;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -18,7 +22,12 @@ import org.springframework.test.web.servlet.MockMvc;
         + "com.baomidou.mybatisplus.autoconfigure.MybatisPlusAutoConfiguration"
 })
 @AutoConfigureMockMvc
+@ActiveProfiles("test")
 class HealthControllerTest {
+
+    @MockitoBean
+    private UserMapper userMapper;
+
     @Autowired
     private MockMvc mockMvc;
 
@@ -40,8 +49,17 @@ class HealthControllerTest {
     }
 
     @Test
-    void nonWhitelistedEndpointRejectsAnonymousRequests() throws Exception {
+    void protectedEndpointRejectsAnonymousRequestsWithUnifiedJson401() throws Exception {
         mockMvc.perform(get("/api/v1/system/not-public"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().encoding(StandardCharsets.UTF_8))
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(content().json("""
+                        {
+                          "code": "AUTH_INVALID_TOKEN",
+                          "message": "登录状态已失效，请重新登录",
+                          "data": null
+                        }
+                        """, JsonCompareMode.STRICT));
     }
 }

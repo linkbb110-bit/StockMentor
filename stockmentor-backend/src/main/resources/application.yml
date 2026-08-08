@@ -16,7 +16,17 @@ springdoc:
   swagger-ui:
     path: /swagger-ui.html
 
+logging:
+  level:
+    org.springframework.web.servlet.mvc.method.annotation: INFO
+
 stockmentor:
+  security:
+    cors:
+      allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
+    jwt:
+      secret: ${JWT_SECRET:}
+      expiration-seconds: ${JWT_EXPIRATION:7200}
   redis:
     enabled: ${REDIS_ENABLED:false}
     host: ${REDIS_HOST:127.0.0.1}

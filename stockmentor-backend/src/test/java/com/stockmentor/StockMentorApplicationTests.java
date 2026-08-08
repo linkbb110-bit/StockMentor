@@ -2,18 +2,30 @@ package com.stockmentor;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.stockmentor.user.mapper.UserMapper;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.context.ApplicationContext;
 import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.util.StringUtils;
 
 @SpringBootTest(properties = {
     "spring.autoconfigure.exclude=org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration,"
         + "org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration,"
         + "com.baomidou.mybatisplus.autoconfigure.MybatisPlusAutoConfiguration"
 })
+@ExtendWith(OutputCaptureExtension.class)
+@ActiveProfiles("test")
 class StockMentorApplicationTests {
+
+    @MockitoBean
+    private UserMapper userMapper;
 
     @Autowired
     private ApplicationContext applicationContext;
@@ -25,5 +37,13 @@ class StockMentorApplicationTests {
     @Test
     void credentialFreeBaselineDoesNotAutoConfigureAUserDetailsService() {
         assertThat(applicationContext.getBeansOfType(UserDetailsService.class)).isEmpty();
+    }
+
+    @Test
+    void applicationStartupDoesNotLogAGeneratedSecurityPassword(CapturedOutput output) {
+        assertThat(StringUtils.countOccurrencesOf(
+                output.getAll(),
+                "Using generated security password"
+        )).isZero();
     }
 }

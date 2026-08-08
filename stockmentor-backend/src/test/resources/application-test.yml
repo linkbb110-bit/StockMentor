@@ -1,0 +1,5 @@
+stockmentor:
+  security:
+    jwt:
+      secret: test-only-not-for-production-jwt-secret-value
+      expiration-seconds: 7200
