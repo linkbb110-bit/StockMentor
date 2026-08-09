@@ -49,20 +49,19 @@ V0.3 复用 ApiResponse<T>、BusinessException、ErrorCode、
 GlobalExceptionHandler、AuthenticatedUser、JWT 过滤链、
 Controller → Service → Repository → Mapper 分层、MyBatis-Plus、
 Flyway、AuthStore、sessionStorage、Axios 认证拦截器和 Vue Router 守卫。
+所有 V0.3 后端接口统一遵循现有 /api/v1 前缀。
 
 经确认的设计与通用文档存在以下差异：
 
-1. 总体 API 规范统一使用 /api/v1，V0.3 已批准接口使用 /api。
-   本设计保留 /api/courses、/api/lessons 和 /api/me，不擅自增加 /v1。
-2. 通用 API 规范要求创建资源返回 201；completion 是幂等状态写入，
+1. 通用 API 规范要求创建资源返回 201；completion 是幂等状态写入，
    第一次和重复调用均按已批准设计返回 200。
-3. 通用 ER 文档使用 learning_progress；V0.3 使用 user_lesson_progress，
+2. 通用 ER 文档使用 learning_progress；V0.3 使用 user_lesson_progress，
    不同时创建两张表。
-4. 通用 ER 文档建议主要业务表包含 updated_at 和 deleted；
+3. 通用 ER 文档建议主要业务表包含 updated_at 和 deleted；
    V0.3 不增加 deleted，user_lesson_progress 也不增加 updated_at。
-5. 通用 ER 与索引文档列出 learning_record；V0.3 明确不创建它。
-6. 页面概览提到上一节和下一节；V0.3 只保证基于个人进度的下一课。
-7. 完整学习 Dashboard 属于 V0.6；V0.3 Dashboard 只展示课程进度。
+4. 通用 ER 与索引文档列出 learning_record；V0.3 明确不创建它。
+5. 页面概览提到上一节和下一节；V0.3 只保证基于个人进度的下一课。
+6. 完整学习 Dashboard 属于 V0.6；V0.3 Dashboard 只展示课程进度。
 
 以上均为已确定的阶段性规则，不授权实施阶段扩展范围。
 
@@ -90,7 +89,9 @@ Flyway、AuthStore、sessionStorage、Axios 认证拦截器和 Vue Router 守卫
 - 只支持标记完成，不支持取消。
 - (user_id, lesson_id) 唯一。
 - 第一次和重复完成均返回 HTTP 200。
-- 重复完成不新增记录，也不改写首次 completed_at。
+- 第一次完成创建记录并写入 completed_at。
+- 重复 PUT 是成功的 no-op，不新增记录，也不改写首次 completed_at。
+- UNIQUE (user_id, lesson_id) 与 MySQL upsert 共同保证并发幂等。
 - 只能完成已发布 Course 下的已发布 Lesson。
 - userId 只来自 AuthenticatedUser；请求体、路径和查询参数均不接受 userId。
 
@@ -98,9 +99,11 @@ Flyway、AuthStore、sessionStorage、Axios 认证拦截器和 Vue Router 守卫
 
 - totalLessons 只统计目标 Course 下已发布 Lesson。
 - completedLessons 只统计当前用户已完成且仍已发布的 Lesson。
-- progressPercent 是 0 到 100 的整数。
-- 使用 BigDecimal 计算并向下取整，避免未全部完成时提前显示 100。
-- totalLessons 为 0 时，完成数和百分比都为 0。
+- completedLessonIds 返回上述已完成且仍已发布 Lesson 的 ID，
+  按 Chapter.sort_order、Lesson.sort_order 排序。
+- progressPercent 是 0 到 100 的整数；totalLessons = 0 时固定为 0。
+- totalLessons > 0 时，按 completedLessons × 100 ÷ totalLessons 向下取整。
+- 只有 completedLessons = totalLessons 且 totalLessons > 0 时才能达到 100。
 - nextLesson 是按 Chapter.sort_order、Lesson.sort_order 排序后的
   第一节已发布且当前用户未完成的 Lesson。
 - 用户可以跳着学习；全部完成时 nextLesson = null。
@@ -176,9 +179,11 @@ V3 不增加逻辑删除、版本号、事件字段或额外业务表。
 ### 4.5 并发幂等
 
 完成写入使用 MySQL INSERT ... ON DUPLICATE KEY UPDATE。
-唯一键是并发正确性的最终保护，不依赖“先查后插”避免竞争。
+UNIQUE (user_id, lesson_id) 是并发正确性的最终保护，
+不依赖“先查后插”避免竞争。
 
-重复键分支执行 no-op，保留 id、completed_at 和 created_at。
+第一次插入写入 completed_at；重复键分支执行成功的 no-op，
+保留 id、第一次 completed_at 和 created_at。
 Service 不根据 affected rows 为 0 判定失败。
 upsert 必须消化重复键，不能让现有全局 DuplicateKeyException
 处理逻辑把它误映射为 USER_EMAIL_ALREADY_EXISTS。
@@ -230,7 +235,7 @@ V0.3 归入 com.stockmentor.course 模块：
 - CourseQueryService：发布过滤、目录组装和课时详情。
 - LearningProgressService：完成幂等、计数、百分比和下一课。
 - CourseRepository：Course、Chapter、Lesson 公开读取。
-- LearningProgressRepository：upsert、完成计数和下一课查询。
+- LearningProgressRepository：upsert、完成计数、有序已完成课时 ID 和下一课查询。
 - Mapper：参数化 SQL，不承载业务判断。
 - Entity 与对外 VO 分离，Entity 不从 Controller 返回。
 
@@ -253,6 +258,8 @@ Service 按 course_id 和 chapter_id 组装树，不按 Chapter 循环查 Lesson
 - Progress 先确认 Course 已发布，避免把 404 与零课时混淆。
 - totalLessons 与 completedLessons 使用数据库 COUNT。
 - 完成 COUNT 的 JOIN 条件必须包含当前 user_id。
+- completedLessonIds 按当前 user_id、目标 course_id 和发布条件查询，
+  按 Chapter.sort_order、Lesson.sort_order、Chapter.id、Lesson.id 排序。
 - nextLesson 使用 NOT EXISTS 排除该用户已完成记录，
   按 Chapter.sort_order、Lesson.sort_order、Chapter.id、Lesson.id 排序并 LIMIT 1。
 - 不把全部 Lesson 和进度加载到 Java 后 count/filter。
@@ -266,14 +273,14 @@ Service 按 course_id 和 chapter_id 组装树，不按 Chapter 循环查 Lesson
 私有接口沿用现有统一 401。
 本阶段优先复用现有错误码，不批量新增课程专用错误码。
 
-### 7.1 GET /api/courses
+### 7.1 GET /api/v1/courses
 
 - 匿名公开，成功返回 200。
 - 只返回已发布 Course，按 sort_order、id 升序。
 - V0.3 不分页；空结果 data = []。
 - CourseSummary：id、title、summary、coverUrl。
 
-### 7.2 GET /api/courses/{courseId}
+### 7.2 GET /api/v1/courses/{courseId}
 
 - 匿名公开，成功返回 200。
 - CourseDetail：id、title、summary、coverUrl、chapters。
@@ -282,45 +289,53 @@ Service 按 course_id 和 chapter_id 组装树，不按 Chapter 循环查 Lesson
 - Chapter 与 Lesson 都按 sort_order、id 升序。
 - 只返回已发布 Lesson；没有已发布 Lesson 的 Chapter 保留空列表。
 
-### 7.3 GET /api/lessons/{lessonId}
+### 7.3 GET /api/v1/lessons/{lessonId}
 
 - 匿名公开，成功返回 200。
 - LessonDetail：id、title、summary、contentMd、estimatedMinutes。
 - 同时返回 course 的 id、title 和 chapter 的 id、title。
 - 不返回数据库 Entity、published 字段或用户进度。
 
-### 7.4 PUT /api/me/lessons/{lessonId}/completion
+### 7.4 PUT /api/v1/me/lessons/{lessonId}/completion
 
 - 必须登录；没有请求体，不接受 userId。
 - 第一次和重复调用都返回 200。
 - LessonCompletionResponse：lessonId、completed = true、completedAt。
 - 重复请求返回相同 completedAt。
 
-### 7.5 GET /api/me/courses/{courseId}/progress
+### 7.5 GET /api/v1/me/courses/{courseId}/progress
 
 - 必须登录，成功返回 200。
-- CourseProgressResponse 只含 completedLessons、totalLessons、
-  progressPercent、nextLesson。
+- CourseProgressResponse 至少包含 completedLessons、totalLessons、
+  progressPercent、completedLessonIds、nextLesson。
+- completedLessonIds 与完成数使用同一发布过滤和当前 userId，
+  用于 Dashboard、CourseDetail 和 LessonView 恢复持久化完成状态。
 - nextLesson 为 null，或包含 id、title、summary、estimatedMinutes、
   chapterId、chapterTitle。
 - Course 未发布或不存在时返回 RESOURCE_NOT_FOUND。
 
 ## 8. 安全设计
 
-Spring Security 只按 GET 方法精确放行：
+Spring Security 只按 GET 方法精确 permitAll 公开课程读取：
 
-- /api/courses
-- /api/courses/*
-- /api/lessons/*
+- GET /api/v1/courses
+- GET /api/v1/courses/{courseId}
+- GET /api/v1/lessons/{lessonId}
 
-/api/me 下两个接口继续由 anyRequest().authenticated() 保护。
-禁止使用覆盖 /api/me 的宽泛公开匹配器。
+现有 JwtAuthenticationFilter 在请求携带无效或过期 Bearer Token 时会直接返回 401，
+而前端 Axios 会自动为请求附加会话 Token。因此，仅配置 permitAll 不足以保证匿名读取。
+V0.3 实现时，JwtAuthenticationFilter 必须按请求方法和路径，
+仅对上述三类精确公开 GET 跳过 JWT 认证解析；
+即使请求携带无效或过期 Bearer Token，也按匿名请求继续。
 
-继续沿用 V0.2 最小 JWT、每请求数据库用户状态检查、统一 401/403、
+/api/v1/me/** 不得跳过 JwtAuthenticationFilter，继续由 anyRequest().authenticated() 严格保护。
+禁止使用覆盖 /api/v1/me/** 的宽泛公开匹配器。私有请求携带无效或过期 Token 时仍返回 401。
+
+私有接口继续沿用 V0.2 最小 JWT、每请求数据库用户状态检查、统一 401/403、
 显式 CORS、日志脱敏和参数化 SQL。
 禁用或删除用户的旧 Token 不能访问进度；404 不清理认证状态，只有 401 触发现有退出流程。
 
-现有 CORS 方法缺少 PUT；后续实现必须加入 PUT，
+现有 CORS allowedMethods 缺少 PUT；后续实现必须加入 PUT，
 并验证允许来源和拒绝来源的预检。
 不得使用通配 Origin 或 Cookie credentials。
 
@@ -337,14 +352,14 @@ Spring Security 只按 GET 方法精确放行：
 保留受保护的 /dashboard 和 /profile。
 公开页面不设置 requiresAuth；会话恢复失败不能阻止匿名课程浏览。
 
-现有 Axios baseURL 为 /api/v1，而 V0.3 固定使用 /api。
-后续继续使用同一个 Axios 实例和同一组 Token/401 拦截器，
-把 baseURL 语义调整为服务端 Origin，并由 API 模块写完整路径：
+继续使用现有 baseURL = /api/v1 的同一个 Axios 实例，
+以及同一组 Token/401 拦截器。V0.3 课程 API 模块使用
+/courses、/lessons/{lessonId} 和 /me/... 等相对路径，最终请求统一落在 /api/v1。
+公开 GET 可能仍会附带 sessionStorage 中的 Token；其匿名可用性由
+JwtAuthenticationFilter 的精确路径跳过规则保证。
 
-- V0.2 使用 /api/v1/...。
-- V0.3 使用 /api/...。
-
-相关 V0.2 API 测试必须回归，不创建第二套拦截器或响应结构。
+相关 V0.2 API 测试必须回归，不修改全局 baseURL，
+不创建第二套拦截器或响应结构。
 
 ### 9.2 状态管理
 
@@ -367,20 +382,25 @@ CourseDetailView：
 - 展示课程简介、有序 Chapter、Lesson 摘要和预计时间。
 - 空 Chapter 显示空状态。
 - 目录一次加载，不按 Chapter 单独发请求。
+- 登录用户同时请求当前课程 progress，用 completedLessonIds 标记已完成课时。
+- 匿名用户只请求公开课程详情，不请求私有 progress。
 
 LessonView：
 
 - 展示标题、摘要、预计时间和 Markdown 正文。
 - 匿名用户看到登录提示，不显示完成按钮。
 - 登录用户可幂等完成；pending 时禁用按钮。
-- 成功后显示已完成并刷新 progress。
+- 登录用户根据 LessonDetail 返回的课程 ID 请求 progress，
+  用 completedLessonIds.includes(lessonId) 在页面刷新后恢复已完成状态。
+- 完成成功后重新读取 progress，立即更新已完成状态和 nextLesson。
 - nextLesson 非空时显示继续学习；为 null 时显示课程完成。
-- 重开已完成课时可安全重复标记；V0.3 不新增单课状态查询。
+- completedLessonIds 已覆盖单课完成状态恢复，V0.3 不新增单独的 lesson-completion 查询 endpoint。
 
 Dashboard：
 
 - 读取公开课程列表，选择排序第一的课程，不硬编码种子 ID；空列表不请求 progress。
-- 展示课程标题、completed / total、progressPercent、nextLesson 和继续学习。
+- 消费 completedLessons、totalLessons、progressPercent、completedLessonIds 和 nextLesson，
+  展示课程标题、completed / total、progressPercent、nextLesson 和继续学习。
 - 100% 时显示课程完成。
 - 保留个人中心和本地退出；不展示正确率、错题、AI、虚拟组合或图表。
 
@@ -396,8 +416,11 @@ Dashboard：
 ## 10. 测试与运行验证
 
 后端单元/Web/Security 测试覆盖匿名读取、未发布 404、排序和发布过滤；
-completion 认证与当前 userId、幂等；0%/部分/100%、跳学、nextLesson；
-用户隔离、PUT CORS，以及健康检查、OpenAPI 和 V0.2 认证回归。
+公开 GET 在无 Token 以及携带无效、过期 Bearer Token 时均可访问，
+而 /api/v1/me/** 在同类 Token 下仍返回 401；
+completion 认证与当前 userId、幂等且重复请求不改变首次 completedAt；
+0%/部分/100%、向下取整、跳学、completedLessonIds、nextLesson；
+用户隔离、精确 permitAll、PUT CORS，以及健康检查、OpenAPI 和 V0.2 认证回归。
 
 真实 MySQL 8 验证 V1→V2→V3、种子数量与排序、四表结构；
 唯一约束、并发 upsert 仅一行且首次时间不变；两用户 COUNT/nextLesson 隔离；
@@ -405,6 +428,8 @@ completion 认证与当前 userId、幂等；0%/部分/100%、跳学、nextLesso
 
 前端覆盖四个页面及其加载/空/错误状态、排序和 Markdown 安全；
 匿名/登录差异、completion pending/成功/401/404、nextLesson 和 100%；
+Dashboard、CourseDetail 和 LessonView 刷新后重新请求 progress，
+通过 completedLessonIds 恢复持久化完成状态；
 公开/受保护路由、404 不退出及 V0.2 认证回归。
 
 后续必须实际执行 mvn clean test、mvn clean package、npm ci、
@@ -430,16 +455,18 @@ npm run test:unit、npm run type-check 和 npm run build。
 
 ## 12. 验收标准
 
-1. 匿名用户可读取已发布课程、目录和课时。
+1. 匿名用户可读取已发布课程、目录和课时；公开 GET 精确 permitAll 并跳过 JWT 解析。
 2. 未发布 Course 或 Lesson 无法通过任何接口读取。
 3. completion 与 progress 必须认证，userId 只来自 AuthenticatedUser。
 4. 两个用户的进度隔离。
-5. 第一次与重复完成均为 200、只有一行且首次时间不变。
-6. 分母只含已发布 Lesson，0%、部分完成和 100% 正确。
+5. 第一次与重复完成均为 200、只有一行且首次 completed_at 不变。
+6. 分母只含已发布 Lesson，0%、向下取整的部分完成和全部完成 100% 正确。
 7. nextLesson 是排序第一的已发布未完成 Lesson；全部完成为 null。
 8. 课程详情三次批量查询，不产生 Chapter 级 N+1。
 9. Flyway 从空库创建四表和一门十章二十课时课程。
 10. Markdown 原始 HTML 被关闭。
 11. Dashboard 只包含课程进度，不提前实现 V0.6 聚合。
 12. 全量测试、打包、类型检查、构建和运行验证有真实证据。
-13. Git 无真实密钥、本地环境文件或范围外业务。
+13. /api/v1/me/** 始终保持认证要求，公开 GET 的 JWT 跳过不得影响私有接口。
+14. Dashboard、CourseDetail 和 LessonView 可通过 completedLessonIds 恢复持久化完成状态。
+15. Git 无真实密钥、本地环境文件或范围外业务。
