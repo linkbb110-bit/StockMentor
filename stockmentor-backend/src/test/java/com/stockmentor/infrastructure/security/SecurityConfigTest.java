@@ -2,9 +2,13 @@ package com.stockmentor.infrastructure.security;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -12,12 +16,19 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stockmentor.course.mapper.ChapterMapper;
 import com.stockmentor.course.mapper.CourseMapper;
+import com.stockmentor.course.mapper.LearningProgressMapper;
 import com.stockmentor.course.mapper.LessonMapper;
 import com.stockmentor.course.service.CourseQueryService;
+import com.stockmentor.course.service.LearningProgressService;
+import com.stockmentor.course.vo.LessonCompletionResponse;
+import com.stockmentor.user.domain.UserRole;
+import com.stockmentor.user.domain.UserStatus;
+import com.stockmentor.user.entity.UserEntity;
 import com.stockmentor.user.mapper.UserMapper;
 import jakarta.servlet.http.HttpServletResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -85,7 +96,13 @@ class SecurityConfigTest {
     private LessonMapper lessonMapper;
 
     @MockitoBean
+    private LearningProgressMapper learningProgressMapper;
+
+    @MockitoBean
     private CourseQueryService courseQueryService;
+
+    @MockitoBean
+    private LearningProgressService learningProgressService;
 
     @Autowired
     private MockMvc mockMvc;
@@ -272,6 +289,57 @@ class SecurityConfigTest {
     }
 
     @Test
+    void privateCompletionWithoutTokenReturnsUnifiedAuthenticationFailure()
+            throws Exception {
+        mockMvc.perform(put("/api/v1/me/lessons/101/completion"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().json(
+                        AUTHENTICATION_FAILURE_JSON,
+                        JsonCompareMode.STRICT
+                ));
+    }
+
+    @Test
+    void authenticatedCompletionUsesTheReloadedCurrentUser() throws Exception {
+        UserEntity user = activeUser(42L);
+        when(userMapper.selectOne(any())).thenReturn(user);
+        LocalDateTime completedAt = LocalDateTime.of(2026, 8, 10, 11, 15);
+        when(learningProgressService.completeLesson(42L, 101L))
+                .thenReturn(new LessonCompletionResponse(101L, true, completedAt));
+        String token = jwtTokenProvider.issue(42L, Instant.now());
+
+        mockMvc.perform(put("/api/v1/me/lessons/101/completion")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isOk());
+
+        verify(learningProgressService).completeLesson(42L, 101L);
+    }
+
+    @Test
+    void allowedOriginCanPreflightPrivateCompletionWithPut() throws Exception {
+        MvcResult result = mockMvc.perform(options(
+                        "/api/v1/me/lessons/101/completion"
+                )
+                        .header(HttpHeaders.ORIGIN, ALLOWED_ORIGIN)
+                        .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "PUT")
+                        .header(
+                                HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS,
+                                "Authorization, Content-Type, Accept"
+                        ))
+                .andExpect(status().isOk())
+                .andExpect(header().string(
+                        HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN,
+                        ALLOWED_ORIGIN
+                ))
+                .andReturn();
+
+        assertThat(commaSeparatedHeader(
+                result,
+                HttpHeaders.ACCESS_CONTROL_ALLOW_METHODS
+        )).contains("PUT");
+    }
+
+    @Test
     void allowedPreflightUsesOnlyTheConfiguredMethodsAndHeadersWithoutCredentials()
             throws Exception {
         MvcResult result = mockMvc.perform(options("/api/v1/users/me")
@@ -294,7 +362,7 @@ class SecurityConfigTest {
         assertThat(commaSeparatedHeader(
                 result,
                 HttpHeaders.ACCESS_CONTROL_ALLOW_METHODS
-        )).containsExactlyInAnyOrder("GET", "POST", "PATCH", "OPTIONS");
+        )).containsExactlyInAnyOrder("GET", "POST", "PATCH", "PUT", "OPTIONS");
         assertThat(commaSeparatedHeader(
                 result,
                 HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS
@@ -302,11 +370,11 @@ class SecurityConfigTest {
     }
 
     @Test
-    void preflightFromOriginOutsideWhitelistIsRejectedWithoutAllowOriginHeader()
+    void rejectedOriginCannotPreflightPrivateCompletionWithPut()
             throws Exception {
-        mockMvc.perform(options("/api/v1/users/me")
+        mockMvc.perform(options("/api/v1/me/lessons/101/completion")
                         .header(HttpHeaders.ORIGIN, REJECTED_ORIGIN)
-                        .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "PATCH")
+                        .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "PUT")
                         .header(
                                 HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS,
                                 "Authorization, Content-Type, Accept"
@@ -329,6 +397,17 @@ class SecurityConfigTest {
                 .isCompatibleWith(MediaType.APPLICATION_JSON)).isTrue();
         assertThat(objectMapper.readTree(response.getContentAsByteArray()))
                 .isEqualTo(objectMapper.readTree(expectedJson));
+    }
+
+    private UserEntity activeUser(long userId) {
+        UserEntity user = new UserEntity();
+        user.setId(userId);
+        user.setEmail("learner@example.com");
+        user.setNickname("学习者");
+        user.setRole(UserRole.USER);
+        user.setStatus(UserStatus.ACTIVE);
+        user.setDeleted(0);
+        return user;
     }
 
     private Set<String> commaSeparatedHeader(MvcResult result, String name) {

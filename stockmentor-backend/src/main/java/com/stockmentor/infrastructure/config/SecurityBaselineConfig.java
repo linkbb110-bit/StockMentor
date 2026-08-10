@@ -35,7 +35,13 @@ public class SecurityBaselineConfig {
     CorsConfigurationSource corsConfigurationSource(CorsProperties corsProperties) {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOrigins(corsProperties.allowedOrigins());
-        configuration.setAllowedMethods(List.of("GET", "POST", "PATCH", "OPTIONS"));
+        configuration.setAllowedMethods(List.of(
+                "GET",
+                "POST",
+                "PATCH",
+                "PUT",
+                "OPTIONS"
+        ));
         configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept"));
         configuration.setAllowCredentials(false);
 
