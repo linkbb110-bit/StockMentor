@@ -10,9 +10,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.stockmentor.course.mapper.ChapterMapper;
+import com.stockmentor.course.mapper.CourseMapper;
+import com.stockmentor.course.mapper.LessonMapper;
+import com.stockmentor.course.service.CourseQueryService;
 import com.stockmentor.user.mapper.UserMapper;
 import jakarta.servlet.http.HttpServletResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -70,11 +75,26 @@ class SecurityConfigTest {
     @MockitoBean
     private UserMapper userMapper;
 
+    @MockitoBean
+    private CourseMapper courseMapper;
+
+    @MockitoBean
+    private ChapterMapper chapterMapper;
+
+    @MockitoBean
+    private LessonMapper lessonMapper;
+
+    @MockitoBean
+    private CourseQueryService courseQueryService;
+
     @Autowired
     private MockMvc mockMvc;
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private JwtTokenProvider jwtTokenProvider;
 
     @Test
     void authenticationEntryPointWritesUnifiedUtf8Json401Directly() throws Exception {
@@ -201,6 +221,50 @@ class SecurityConfigTest {
                 .andExpect(status().isUnauthorized())
                 .andExpect(content().encoding(StandardCharsets.UTF_8))
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(content().json(
+                        AUTHENTICATION_FAILURE_JSON,
+                        JsonCompareMode.STRICT
+                ));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+        "/api/v1/courses",
+        "/api/v1/courses/7",
+        "/api/v1/lessons/101"
+    })
+    void publicCourseGetsAreAvailableWithoutAuthentication(String path) throws Exception {
+        mockMvc.perform(get(path))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void invalidBearerDoesNotBlockAnonymousCourseReading() throws Exception {
+        mockMvc.perform(get("/api/v1/courses")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer invalid-token"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void expiredBearerDoesNotBlockAnonymousLessonReading() throws Exception {
+        String expiredToken = jwtTokenProvider.issue(
+                42L,
+                Instant.now().minusSeconds(7_201)
+        );
+
+        mockMvc.perform(get("/api/v1/lessons/101")
+                        .header(
+                                HttpHeaders.AUTHORIZATION,
+                                "Bearer " + expiredToken
+                        ))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void invalidBearerStillFailsOnExistingPrivateEndpoint() throws Exception {
+        mockMvc.perform(get("/api/v1/users/me")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer invalid-token"))
+                .andExpect(status().isUnauthorized())
                 .andExpect(content().json(
                         AUTHENTICATION_FAILURE_JSON,
                         JsonCompareMode.STRICT

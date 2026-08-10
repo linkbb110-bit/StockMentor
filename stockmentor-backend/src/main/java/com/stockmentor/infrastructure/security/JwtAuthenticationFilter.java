@@ -26,15 +26,23 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtTokenProvider jwtTokenProvider;
     private final SecurityUserService securityUserService;
     private final ObjectMapper objectMapper;
+    private final PublicCourseGetRequestMatcher publicCourseGetRequestMatcher;
 
     public JwtAuthenticationFilter(
             JwtTokenProvider jwtTokenProvider,
             SecurityUserService securityUserService,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            PublicCourseGetRequestMatcher publicCourseGetRequestMatcher
     ) {
         this.jwtTokenProvider = jwtTokenProvider;
         this.securityUserService = securityUserService;
         this.objectMapper = objectMapper;
+        this.publicCourseGetRequestMatcher = publicCourseGetRequestMatcher;
+    }
+
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        return publicCourseGetRequestMatcher.matches(request);
     }
 
     @Override

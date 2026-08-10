@@ -2,6 +2,7 @@ package com.stockmentor.infrastructure.config;
 
 import com.stockmentor.infrastructure.security.CorsProperties;
 import com.stockmentor.infrastructure.security.JwtAuthenticationFilter;
+import com.stockmentor.infrastructure.security.PublicCourseGetRequestMatcher;
 import com.stockmentor.infrastructure.security.RestAccessDeniedHandler;
 import com.stockmentor.infrastructure.security.RestAuthenticationEntryPoint;
 import java.util.List;
@@ -47,6 +48,7 @@ public class SecurityBaselineConfig {
     SecurityFilterChain securityFilterChain(
             HttpSecurity http,
             JwtAuthenticationFilter jwtAuthenticationFilter,
+            PublicCourseGetRequestMatcher publicCourseGetRequestMatcher,
             RestAuthenticationEntryPoint authenticationEntryPoint,
             RestAccessDeniedHandler accessDeniedHandler
     ) throws Exception {
@@ -61,6 +63,8 @@ public class SecurityBaselineConfig {
                         .authenticationEntryPoint(authenticationEntryPoint)
                         .accessDeniedHandler(accessDeniedHandler))
                 .authorizeHttpRequests(authorize -> authorize
+                        .requestMatchers(publicCourseGetRequestMatcher)
+                        .permitAll()
                         .requestMatchers(
                                 HttpMethod.POST,
                                 "/api/v1/auth/register",
