@@ -21,6 +21,10 @@ import com.stockmentor.auth.vo.AuthResponse;
 import com.stockmentor.common.exception.BusinessException;
 import com.stockmentor.common.exception.ErrorCode;
 import com.stockmentor.common.exception.GlobalExceptionHandler;
+import com.stockmentor.course.mapper.ChapterMapper;
+import com.stockmentor.course.mapper.CourseMapper;
+import com.stockmentor.course.mapper.LearningProgressMapper;
+import com.stockmentor.course.mapper.LessonMapper;
 import com.stockmentor.user.domain.UserRole;
 import com.stockmentor.user.mapper.UserMapper;
 import com.stockmentor.user.vo.CurrentUserResponse;
@@ -105,6 +109,18 @@ class AuthControllerTest {
 
     @MockitoBean
     private UserMapper userMapper;
+
+    @MockitoBean
+    private CourseMapper courseMapper;
+
+    @MockitoBean
+    private ChapterMapper chapterMapper;
+
+    @MockitoBean
+    private LessonMapper lessonMapper;
+
+    @MockitoBean
+    private LearningProgressMapper learningProgressMapper;
 
     @Autowired
     private MockMvc mockMvc;

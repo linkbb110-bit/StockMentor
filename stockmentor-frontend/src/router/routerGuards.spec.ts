@@ -34,6 +34,9 @@ describe('authentication routes', () => {
     expect(routes.get('/register')?.meta).toMatchObject({ publicOnly: true })
     expect(routes.get('/dashboard')?.meta).toMatchObject({ requiresAuth: true })
     expect(routes.get('/profile')?.meta).toMatchObject({ requiresAuth: true })
+    expect(routes.get('/courses')?.meta.requiresAuth).not.toBe(true)
+    expect(routes.get('/courses/:courseId')?.meta.requiresAuth).not.toBe(true)
+    expect(routes.get('/lessons/:lessonId')?.meta.requiresAuth).not.toBe(true)
   })
 })
 
@@ -95,6 +98,14 @@ describe('authentication route guard', () => {
     await expect(
       guard({ path: '/profile', meta: { requiresAuth: true } }),
     ).resolves.toEqual({ path: '/login' })
+    expect(store.restoreSession).toHaveBeenCalledOnce()
+  })
+
+  it('keeps a public course route available when session restoration fails', async () => {
+    store.restoreSession = vi.fn().mockRejectedValue(new Error('restoration failed'))
+    const guard = createAuthenticationGuard(() => store)
+
+    await expect(guard({ path: '/courses/7', meta: {} })).resolves.toBeUndefined()
     expect(store.restoreSession).toHaveBeenCalledOnce()
   })
 })

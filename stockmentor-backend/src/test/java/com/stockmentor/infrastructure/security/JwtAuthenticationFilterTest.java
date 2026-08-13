@@ -55,7 +55,12 @@ class JwtAuthenticationFilterTest {
     void setUp() {
         SecurityContextHolder.clearContext();
         objectMapper = new ObjectMapper();
-        filter = new JwtAuthenticationFilter(jwtTokenProvider, securityUserService, objectMapper);
+        filter = new JwtAuthenticationFilter(
+                jwtTokenProvider,
+                securityUserService,
+                objectMapper,
+                new PublicCourseGetRequestMatcher()
+        );
     }
 
     @AfterEach
@@ -199,6 +204,26 @@ class JwtAuthenticationFilterTest {
         assertPublicAuthenticationFailure(response, ErrorCode.AUTH_TOKEN_EXPIRED);
         verifyNoInteractions(securityUserService);
         verify(filterChain, never()).doFilter(request, response);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+        "/api/v1/courses",
+        "/api/v1/courses/7",
+        "/api/v1/lessons/101"
+    })
+    void publicCourseGetDoesNotParseAnInvalidOrExpiredBearerToken(String path)
+            throws Exception {
+        MockHttpServletRequest request = requestWithBearer(TOKEN);
+        request.setMethod("GET");
+        request.setRequestURI(path);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, filterChain);
+
+        assertThat(response.getStatus()).isEqualTo(200);
+        verify(filterChain).doFilter(request, response);
+        verifyNoInteractions(jwtTokenProvider, securityUserService);
     }
 
     @Test

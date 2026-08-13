@@ -8,6 +8,9 @@ import { useAuthStore } from '../features/auth/stores/authStore'
 import AuthDashboardView from '../features/auth/views/AuthDashboardView.vue'
 import LoginView from '../features/auth/views/LoginView.vue'
 import RegisterView from '../features/auth/views/RegisterView.vue'
+import CourseDetailView from '../features/course/views/CourseDetailView.vue'
+import CoursesView from '../features/course/views/CoursesView.vue'
+import LessonView from '../features/course/views/LessonView.vue'
 import ProfileView from '../features/profile/views/ProfileView.vue'
 import { pinia } from '../stores'
 
@@ -64,6 +67,21 @@ const router = createRouter({
       name: 'register',
       component: RegisterView,
       meta: { publicOnly: true },
+    },
+    {
+      path: '/courses',
+      name: 'courses',
+      component: CoursesView,
+    },
+    {
+      path: '/courses/:courseId',
+      name: 'course-detail',
+      component: CourseDetailView,
+    },
+    {
+      path: '/lessons/:lessonId',
+      name: 'lesson-detail',
+      component: LessonView,
     },
     {
       path: '/dashboard',
