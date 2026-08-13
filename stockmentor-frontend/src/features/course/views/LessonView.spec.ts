@@ -1,4 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
+import { defineComponent } from 'vue'
+import { createMemoryHistory, createRouter, RouterView } from 'vue-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
@@ -6,7 +8,6 @@ const mocks = vi.hoisted(() => ({
   getCourseProgress: vi.fn(),
   completeLesson: vi.fn(),
   isAuthenticated: false,
-  routeParams: { lessonId: '101' },
 }))
 
 vi.mock('../api/courseApi', () => ({
@@ -26,15 +27,33 @@ vi.mock('../../auth/stores/authStore', () => ({
   }),
 }))
 
-vi.mock('vue-router', () => ({
-  useRoute: () => ({ params: mocks.routeParams }),
-}))
-
 import LessonView from './LessonView.vue'
 
 const routerLinkStub = {
   props: ['to'],
   template: '<a :href="to"><slot /></a>',
+}
+
+const routerHost = defineComponent({
+  components: { RouterView },
+  template: '<RouterView />',
+})
+
+const mountLessonAt = async (path = '/lessons/101') => {
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [{ path: '/lessons/:lessonId', component: LessonView }],
+  })
+  await router.push(path)
+  await router.isReady()
+  const wrapper = mount(routerHost, {
+    global: {
+      plugins: [router],
+      stubs: { RouterLink: routerLinkStub },
+    },
+  })
+  await flushPromises()
+  return { router, wrapper }
 }
 
 const apiResponse = <T>(data: T) => ({
@@ -51,6 +70,15 @@ const lesson = {
   courseTitle: '股票投资基础',
   chapterId: 11,
   chapterTitle: '第一章 市场与资产',
+}
+
+const nextLesson = {
+  ...lesson,
+  id: 102,
+  title: '指数是什么',
+  summary: '理解指数用途。',
+  contentMd: '## 市场的温度计\n\n指数用一组样本反映市场变化。',
+  estimatedMinutes: 7,
 }
 
 const incompleteProgress = {
@@ -91,11 +119,7 @@ describe('LessonView', () => {
   })
 
   it('lets anonymous users read Markdown and context without any private request', async () => {
-    const wrapper = mount(LessonView, {
-      global: { stubs: { RouterLink: routerLinkStub } },
-    })
-
-    await flushPromises()
+    const { wrapper } = await mountLessonAt()
 
     expect(mocks.getLesson).toHaveBeenCalledWith(101)
     expect(mocks.getCourseProgress).not.toHaveBeenCalled()
@@ -113,17 +137,11 @@ describe('LessonView', () => {
     mocks.isAuthenticated = true
     mocks.getCourseProgress.mockResolvedValue(apiResponse(completedProgress))
 
-    const firstMount = mount(LessonView, {
-      global: { stubs: { RouterLink: routerLinkStub } },
-    })
-    await flushPromises()
+    const { wrapper: firstMount } = await mountLessonAt()
     expect(firstMount.get('[data-testid="lesson-completed"]').text()).toContain('已完成')
     firstMount.unmount()
 
-    const refreshedMount = mount(LessonView, {
-      global: { stubs: { RouterLink: routerLinkStub } },
-    })
-    await flushPromises()
+    const { wrapper: refreshedMount } = await mountLessonAt()
 
     expect(mocks.getLesson).toHaveBeenCalledTimes(2)
     expect(mocks.getCourseProgress).toHaveBeenCalledTimes(2)
@@ -143,10 +161,7 @@ describe('LessonView', () => {
         finishCompletion = resolve
       }),
     )
-    const wrapper = mount(LessonView, {
-      global: { stubs: { RouterLink: routerLinkStub } },
-    })
-    await flushPromises()
+    const { wrapper } = await mountLessonAt()
 
     const button = wrapper.get('[data-testid="complete-lesson"]')
     await button.trigger('click')
@@ -174,10 +189,7 @@ describe('LessonView', () => {
     mocks.isAuthenticated = true
     mocks.getCourseProgress.mockResolvedValue(apiResponse(incompleteProgress))
     mocks.completeLesson.mockRejectedValue(rawError)
-    const wrapper = mount(LessonView, {
-      global: { stubs: { RouterLink: routerLinkStub } },
-    })
-    await flushPromises()
+    const { wrapper } = await mountLessonAt()
 
     await wrapper.get('[data-testid="complete-lesson"]').trigger('click')
     await flushPromises()
@@ -187,5 +199,52 @@ describe('LessonView', () => {
     expect(wrapper.find('[data-testid="lesson-completed"]').exists()).toBe(false)
     expect(wrapper.get('[data-testid="complete-lesson"]').attributes('disabled')).toBeUndefined()
     expect(mocks.getCourseProgress).toHaveBeenCalledOnce()
+  })
+
+  it('reloads lesson and completed state when the reused route parameter changes', async () => {
+    mocks.isAuthenticated = true
+    mocks.getLesson.mockImplementation((lessonId: number) =>
+      Promise.resolve(apiResponse(lessonId === 101 ? lesson : nextLesson)),
+    )
+    mocks.getCourseProgress.mockResolvedValue(apiResponse(completedProgress))
+    const { router, wrapper } = await mountLessonAt()
+
+    expect(wrapper.get('h1').text()).toBe(lesson.title)
+    expect(wrapper.get('[data-testid="lesson-completed"]').text()).toContain('已完成')
+
+    await router.push('/lessons/102')
+    await flushPromises()
+
+    expect(mocks.getLesson).toHaveBeenNthCalledWith(2, 102)
+    expect(mocks.getCourseProgress).toHaveBeenCalledTimes(2)
+    expect(wrapper.get('h1').text()).toBe(nextLesson.title)
+    expect(wrapper.text()).toContain('市场的温度计')
+    expect(wrapper.text()).not.toContain(lesson.title)
+    expect(wrapper.find('[data-testid="lesson-completed"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="complete-lesson"]').text()).toContain('标记完成')
+  })
+
+  it('ignores a stale lesson response after a rapid route change', async () => {
+    let resolveFirstLesson: ((value: ReturnType<typeof apiResponse>) => void) | undefined
+    mocks.getLesson.mockImplementation((lessonId: number) => {
+      if (lessonId === 101) {
+        return new Promise((resolve) => {
+          resolveFirstLesson = resolve
+        })
+      }
+      return Promise.resolve(apiResponse(nextLesson))
+    })
+    const { router, wrapper } = await mountLessonAt()
+
+    await router.push('/lessons/102')
+    await flushPromises()
+
+    expect(wrapper.get('h1').text()).toBe(nextLesson.title)
+    resolveFirstLesson?.(apiResponse(lesson))
+    await flushPromises()
+
+    expect(mocks.getLesson).toHaveBeenNthCalledWith(2, 102)
+    expect(wrapper.get('h1').text()).toBe(nextLesson.title)
+    expect(wrapper.text()).not.toContain(lesson.title)
   })
 })

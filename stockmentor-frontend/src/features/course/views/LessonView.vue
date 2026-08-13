@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 
 import { useAuthStore } from '../../auth/stores/authStore'
@@ -10,7 +10,6 @@ import type { CourseProgress, LessonDetail } from '../types/course'
 
 const route = useRoute()
 const authStore = useAuthStore()
-const lessonId = Number(route.params.lessonId)
 
 const lesson = ref<LessonDetail | null>(null)
 const progress = ref<CourseProgress | null>(null)
@@ -20,6 +19,7 @@ const completionPending = ref(false)
 const errorMessage = ref('')
 const progressError = ref('')
 const completionError = ref('')
+let loadGeneration = 0
 
 const completed = computed(() =>
   lesson.value === null
@@ -27,32 +27,58 @@ const completed = computed(() =>
     : progress.value?.completedLessonIds.includes(lesson.value.id) ?? false,
 )
 
-const refreshProgress = async (courseId: number): Promise<void> => {
+const isCurrentGeneration = (generation: number): boolean => generation === loadGeneration
+
+const resetLessonState = (): void => {
+  lesson.value = null
+  progress.value = null
+  loading.value = true
+  progressReady.value = false
+  completionPending.value = false
+  errorMessage.value = ''
+  progressError.value = ''
+  completionError.value = ''
+}
+
+const refreshProgress = async (courseId: number, generation: number): Promise<void> => {
   const response = await getCourseProgress(courseId)
+  if (!isCurrentGeneration(generation)) {
+    return
+  }
   progress.value = response.data.data
   progressReady.value = true
   progressError.value = ''
 }
 
-const loadLesson = async (): Promise<void> => {
-  loading.value = true
-  errorMessage.value = ''
+const loadLesson = async (lessonId: number, generation: number): Promise<void> => {
+  resetLessonState()
+  let loadedLesson: LessonDetail | null = null
 
   try {
     const response = await getLesson(lessonId)
-    lesson.value = response.data.data
+    if (!isCurrentGeneration(generation)) {
+      return
+    }
+    loadedLesson = response.data.data
+    lesson.value = loadedLesson
   } catch {
-    errorMessage.value = '课时加载失败，请稍后重试。'
+    if (isCurrentGeneration(generation)) {
+      errorMessage.value = '课时加载失败，请稍后重试。'
+    }
   } finally {
-    loading.value = false
+    if (isCurrentGeneration(generation)) {
+      loading.value = false
+    }
   }
 
-  if (lesson.value && authStore.isAuthenticated) {
+  if (loadedLesson && authStore.isAuthenticated && isCurrentGeneration(generation)) {
     try {
-      await refreshProgress(lesson.value.courseId)
+      await refreshProgress(loadedLesson.courseId, generation)
     } catch {
-      progressReady.value = false
-      progressError.value = '学习进度加载失败，请稍后重试。'
+      if (isCurrentGeneration(generation)) {
+        progressReady.value = false
+        progressError.value = '学习进度加载失败，请稍后重试。'
+      }
     }
   }
 }
@@ -62,20 +88,36 @@ const markComplete = async (): Promise<void> => {
     return
   }
 
+  const currentLesson = lesson.value
+  const generation = loadGeneration
   completionPending.value = true
   completionError.value = ''
 
   try {
-    await completeLesson(lesson.value.id)
-    await refreshProgress(lesson.value.courseId)
+    await completeLesson(currentLesson.id)
+    if (!isCurrentGeneration(generation)) {
+      return
+    }
+    await refreshProgress(currentLesson.courseId, generation)
   } catch {
-    completionError.value = '记录完成状态失败，请稍后重试。'
+    if (isCurrentGeneration(generation)) {
+      completionError.value = '记录完成状态失败，请稍后重试。'
+    }
   } finally {
-    completionPending.value = false
+    if (isCurrentGeneration(generation)) {
+      completionPending.value = false
+    }
   }
 }
 
-onMounted(loadLesson)
+watch(
+  () => route.params.lessonId,
+  (routeLessonId) => {
+    loadGeneration += 1
+    void loadLesson(Number(routeLessonId), loadGeneration)
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
