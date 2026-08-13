@@ -2,6 +2,10 @@ package com.stockmentor;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.stockmentor.course.mapper.ChapterMapper;
+import com.stockmentor.course.mapper.CourseMapper;
+import com.stockmentor.course.mapper.LearningProgressMapper;
+import com.stockmentor.course.mapper.LessonMapper;
 import com.stockmentor.user.mapper.UserMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -26,6 +30,18 @@ class StockMentorApplicationTests {
 
     @MockitoBean
     private UserMapper userMapper;
+
+    @MockitoBean
+    private CourseMapper courseMapper;
+
+    @MockitoBean
+    private ChapterMapper chapterMapper;
+
+    @MockitoBean
+    private LessonMapper lessonMapper;
+
+    @MockitoBean
+    private LearningProgressMapper learningProgressMapper;
 
     @Autowired
     private ApplicationContext applicationContext;

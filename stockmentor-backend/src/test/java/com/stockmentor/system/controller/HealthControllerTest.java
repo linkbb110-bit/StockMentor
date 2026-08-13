@@ -4,6 +4,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.stockmentor.course.mapper.ChapterMapper;
+import com.stockmentor.course.mapper.CourseMapper;
+import com.stockmentor.course.mapper.LearningProgressMapper;
+import com.stockmentor.course.mapper.LessonMapper;
 import com.stockmentor.user.mapper.UserMapper;
 import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Test;
@@ -27,6 +31,18 @@ class HealthControllerTest {
 
     @MockitoBean
     private UserMapper userMapper;
+
+    @MockitoBean
+    private CourseMapper courseMapper;
+
+    @MockitoBean
+    private ChapterMapper chapterMapper;
+
+    @MockitoBean
+    private LessonMapper lessonMapper;
+
+    @MockitoBean
+    private LearningProgressMapper learningProgressMapper;
 
     @Autowired
     private MockMvc mockMvc;

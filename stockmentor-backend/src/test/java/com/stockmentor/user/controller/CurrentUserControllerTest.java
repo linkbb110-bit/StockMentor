@@ -13,6 +13,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.stockmentor.infrastructure.security.AuthenticatedUser;
 import com.stockmentor.infrastructure.security.JwtTokenProvider;
 import com.stockmentor.infrastructure.security.SecurityUserService;
+import com.stockmentor.course.mapper.ChapterMapper;
+import com.stockmentor.course.mapper.CourseMapper;
+import com.stockmentor.course.mapper.LearningProgressMapper;
+import com.stockmentor.course.mapper.LessonMapper;
 import com.stockmentor.user.domain.UserRole;
 import com.stockmentor.user.dto.UpdateNicknameRequest;
 import com.stockmentor.user.mapper.UserMapper;
@@ -73,6 +77,18 @@ class CurrentUserControllerTest {
 
     @MockitoBean
     private UserMapper userMapper;
+
+    @MockitoBean
+    private CourseMapper courseMapper;
+
+    @MockitoBean
+    private ChapterMapper chapterMapper;
+
+    @MockitoBean
+    private LessonMapper lessonMapper;
+
+    @MockitoBean
+    private LearningProgressMapper learningProgressMapper;
 
     @Autowired
     private MockMvc mockMvc;
