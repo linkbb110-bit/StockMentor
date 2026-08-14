@@ -21,6 +21,11 @@ import com.stockmentor.course.mapper.LessonMapper;
 import com.stockmentor.course.service.CourseQueryService;
 import com.stockmentor.course.service.LearningProgressService;
 import com.stockmentor.course.vo.LessonCompletionResponse;
+import com.stockmentor.quiz.mapper.QuestionMapper;
+import com.stockmentor.quiz.mapper.QuestionOptionMapper;
+import com.stockmentor.quiz.mapper.QuizMapper;
+import com.stockmentor.quiz.mapper.QuizQuestionMapper;
+import com.stockmentor.quiz.service.QuizQueryService;
 import com.stockmentor.user.domain.UserRole;
 import com.stockmentor.user.domain.UserStatus;
 import com.stockmentor.user.entity.UserEntity;
@@ -99,10 +104,25 @@ class SecurityConfigTest {
     private LearningProgressMapper learningProgressMapper;
 
     @MockitoBean
+    private QuestionMapper questionMapper;
+
+    @MockitoBean
+    private QuestionOptionMapper questionOptionMapper;
+
+    @MockitoBean
+    private QuizMapper quizMapper;
+
+    @MockitoBean
+    private QuizQuestionMapper quizQuestionMapper;
+
+    @MockitoBean
     private CourseQueryService courseQueryService;
 
     @MockitoBean
     private LearningProgressService learningProgressService;
+
+    @MockitoBean
+    private QuizQueryService quizQueryService;
 
     @Autowired
     private MockMvc mockMvc;
@@ -248,7 +268,8 @@ class SecurityConfigTest {
     @ValueSource(strings = {
         "/api/v1/courses",
         "/api/v1/courses/7",
-        "/api/v1/lessons/101"
+        "/api/v1/lessons/101",
+        "/api/v1/lessons/101/quiz"
     })
     void publicCourseGetsAreAvailableWithoutAuthentication(String path) throws Exception {
         mockMvc.perform(get(path))
