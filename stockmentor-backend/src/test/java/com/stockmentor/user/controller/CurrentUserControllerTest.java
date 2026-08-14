@@ -17,6 +17,14 @@ import com.stockmentor.course.mapper.ChapterMapper;
 import com.stockmentor.course.mapper.CourseMapper;
 import com.stockmentor.course.mapper.LearningProgressMapper;
 import com.stockmentor.course.mapper.LessonMapper;
+import com.stockmentor.quiz.mapper.QuestionMapper;
+import com.stockmentor.quiz.mapper.QuestionOptionMapper;
+import com.stockmentor.quiz.mapper.QuizAnswerMapper;
+import com.stockmentor.quiz.mapper.QuizAnswerOptionMapper;
+import com.stockmentor.quiz.mapper.QuizAttemptMapper;
+import com.stockmentor.quiz.mapper.QuizMapper;
+import com.stockmentor.quiz.mapper.QuizQuestionMapper;
+import com.stockmentor.quiz.mapper.WrongQuestionMapper;
 import com.stockmentor.user.domain.UserRole;
 import com.stockmentor.user.dto.UpdateNicknameRequest;
 import com.stockmentor.user.mapper.UserMapper;
@@ -89,6 +97,30 @@ class CurrentUserControllerTest {
 
     @MockitoBean
     private LearningProgressMapper learningProgressMapper;
+
+    @MockitoBean
+    private QuizMapper quizMapper;
+
+    @MockitoBean
+    private QuizQuestionMapper quizQuestionMapper;
+
+    @MockitoBean
+    private QuestionMapper questionMapper;
+
+    @MockitoBean
+    private QuestionOptionMapper questionOptionMapper;
+
+    @MockitoBean
+    private QuizAttemptMapper quizAttemptMapper;
+
+    @MockitoBean
+    private QuizAnswerMapper quizAnswerMapper;
+
+    @MockitoBean
+    private QuizAnswerOptionMapper quizAnswerOptionMapper;
+
+    @MockitoBean
+    private WrongQuestionMapper wrongQuestionMapper;
 
     @Autowired
     private MockMvc mockMvc;

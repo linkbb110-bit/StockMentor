@@ -23,8 +23,12 @@ import com.stockmentor.course.service.LearningProgressService;
 import com.stockmentor.course.vo.LessonCompletionResponse;
 import com.stockmentor.quiz.mapper.QuestionMapper;
 import com.stockmentor.quiz.mapper.QuestionOptionMapper;
+import com.stockmentor.quiz.mapper.QuizAnswerMapper;
+import com.stockmentor.quiz.mapper.QuizAnswerOptionMapper;
+import com.stockmentor.quiz.mapper.QuizAttemptMapper;
 import com.stockmentor.quiz.mapper.QuizMapper;
 import com.stockmentor.quiz.mapper.QuizQuestionMapper;
+import com.stockmentor.quiz.mapper.WrongQuestionMapper;
 import com.stockmentor.quiz.service.QuizQueryService;
 import com.stockmentor.user.domain.UserRole;
 import com.stockmentor.user.domain.UserStatus;
@@ -114,6 +118,18 @@ class SecurityConfigTest {
 
     @MockitoBean
     private QuizQuestionMapper quizQuestionMapper;
+
+    @MockitoBean
+    private QuizAttemptMapper quizAttemptMapper;
+
+    @MockitoBean
+    private QuizAnswerMapper quizAnswerMapper;
+
+    @MockitoBean
+    private QuizAnswerOptionMapper quizAnswerOptionMapper;
+
+    @MockitoBean
+    private WrongQuestionMapper wrongQuestionMapper;
 
     @MockitoBean
     private CourseQueryService courseQueryService;
@@ -313,6 +329,62 @@ class SecurityConfigTest {
     void privateCompletionWithoutTokenReturnsUnifiedAuthenticationFailure()
             throws Exception {
         mockMvc.perform(put("/api/v1/me/lessons/101/completion"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().json(
+                        AUTHENTICATION_FAILURE_JSON,
+                        JsonCompareMode.STRICT
+                ));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+        "/api/v1/me/quizzes/7/attempts",
+        "/api/v1/me/wrong-questions/31/answer"
+    })
+    void privateQuizPostsWithoutTokenReturnUnifiedAuthenticationFailure(String path)
+            throws Exception {
+        mockMvc.perform(post(path)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().json(
+                        AUTHENTICATION_FAILURE_JSON,
+                        JsonCompareMode.STRICT
+                ));
+    }
+
+    @Test
+    void privateWrongQuestionListWithoutTokenReturnsUnifiedAuthenticationFailure()
+            throws Exception {
+        mockMvc.perform(get("/api/v1/me/wrong-questions"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().json(
+                        AUTHENTICATION_FAILURE_JSON,
+                        JsonCompareMode.STRICT
+                ));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+        "/api/v1/me/quizzes/7/attempts",
+        "/api/v1/me/wrong-questions/31/answer"
+    })
+    void invalidBearerStillFailsOnPrivateQuizPosts(String path) throws Exception {
+        mockMvc.perform(post(path)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer invalid-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().json(
+                        AUTHENTICATION_FAILURE_JSON,
+                        JsonCompareMode.STRICT
+                ));
+    }
+
+    @Test
+    void invalidBearerStillFailsOnPrivateWrongQuestionList() throws Exception {
+        mockMvc.perform(get("/api/v1/me/wrong-questions")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer invalid-token"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(content().json(
                         AUTHENTICATION_FAILURE_JSON,

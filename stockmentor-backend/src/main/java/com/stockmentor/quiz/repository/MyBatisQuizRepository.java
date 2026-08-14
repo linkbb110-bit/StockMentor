@@ -41,4 +41,29 @@ public class MyBatisQuizRepository implements QuizRepository {
         }
         return questionOptionMapper.selectPublishedByQuestionIds(questionIds);
     }
+
+    @Override
+    public Optional<PublishedQuizRow> findPublishedByQuizId(long quizId) {
+        return Optional.ofNullable(quizMapper.selectPublishedByQuizId(quizId));
+    }
+
+    @Override
+    public List<QuizScoringQuestionRow> findScoringQuestions(long quizId) {
+        return quizQuestionMapper.selectScoringByQuizId(quizId);
+    }
+
+    @Override
+    public List<QuizScoringOptionRow> findScoringOptions(List<Long> questionIds) {
+        if (questionIds.isEmpty()) {
+            return List.of();
+        }
+        return questionOptionMapper.selectScoringByQuestionIds(questionIds);
+    }
+
+    @Override
+    public Optional<QuizScoringQuestionRow> findScoringQuestion(long questionId) {
+        return Optional.ofNullable(
+                quizQuestionMapper.selectVisibleScoringByQuestionId(questionId)
+        );
+    }
 }
