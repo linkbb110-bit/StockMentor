@@ -130,6 +130,7 @@ describe('LessonView', () => {
     expect(wrapper.text()).toContain('第一章 市场与资产')
     expect(wrapper.text()).toContain('8 分钟')
     expect(wrapper.get('a[href="/login"]').text()).toContain('登录')
+    expect(wrapper.get('a[href="/lessons/101/quiz"]').text()).toContain('课后测验')
     expect(wrapper.find('[data-testid="complete-lesson"]').exists()).toBe(false)
   })
 
@@ -218,6 +219,8 @@ describe('LessonView', () => {
     expect(mocks.getLesson).toHaveBeenNthCalledWith(2, 102)
     expect(mocks.getCourseProgress).toHaveBeenCalledTimes(2)
     expect(wrapper.get('h1').text()).toBe(nextLesson.title)
+    expect(wrapper.get('a[href="/lessons/102/quiz"]').text()).toContain('课后测验')
+    expect(wrapper.find('a[href="/lessons/101/quiz"]').exists()).toBe(false)
     expect(wrapper.text()).toContain('市场的温度计')
     expect(wrapper.text()).not.toContain(lesson.title)
     expect(wrapper.find('[data-testid="lesson-completed"]').exists()).toBe(false)

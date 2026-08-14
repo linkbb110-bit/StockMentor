@@ -97,6 +97,12 @@ describe('AuthDashboardView', () => {
     expect(mocks.getCourseProgress).not.toHaveBeenCalled()
   })
 
+  it('offers authenticated learners a direct wrong-question entry', () => {
+    const wrapper = mountDashboard()
+
+    expect(wrapper.get('a[href="/wrong-questions"]').text()).toContain('错题本')
+  })
+
   it('uses the first ordered course and reloads partial progress from the backend on mount', async () => {
     const refreshedProgress = {
       ...partialProgress,

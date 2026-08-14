@@ -12,6 +12,8 @@ import CourseDetailView from '../features/course/views/CourseDetailView.vue'
 import CoursesView from '../features/course/views/CoursesView.vue'
 import LessonView from '../features/course/views/LessonView.vue'
 import ProfileView from '../features/profile/views/ProfileView.vue'
+import QuizView from '../features/quiz/views/QuizView.vue'
+import WrongQuestionsView from '../features/quiz/views/WrongQuestionsView.vue'
 import { pinia } from '../stores'
 
 interface AuthenticationStore {
@@ -84,6 +86,11 @@ const router = createRouter({
       component: LessonView,
     },
     {
+      path: '/lessons/:lessonId/quiz',
+      name: 'lesson-quiz',
+      component: QuizView,
+    },
+    {
       path: '/dashboard',
       name: 'dashboard',
       component: AuthDashboardView,
@@ -93,6 +100,12 @@ const router = createRouter({
       path: '/profile',
       name: 'profile',
       component: ProfileView,
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/wrong-questions',
+      name: 'wrong-questions',
+      component: WrongQuestionsView,
       meta: { requiresAuth: true },
     },
   ],
