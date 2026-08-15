@@ -60,6 +60,7 @@ onMounted(loadDashboard)
         </div>
         <nav class="account-actions" aria-label="用户操作">
           <RouterLink class="button-secondary button-link" to="/courses">浏览课程</RouterLink>
+          <RouterLink class="button-secondary button-link" to="/wrong-questions">错题本</RouterLink>
           <RouterLink class="button-secondary button-link" to="/profile">个人中心</RouterLink>
           <button data-testid="dashboard-logout" class="button-secondary" type="button" @click="logout">
             退出登录

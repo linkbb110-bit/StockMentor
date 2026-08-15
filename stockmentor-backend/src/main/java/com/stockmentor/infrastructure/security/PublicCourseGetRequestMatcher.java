@@ -13,6 +13,8 @@ public class PublicCourseGetRequestMatcher implements RequestMatcher {
             Pattern.compile("^/api/v1/courses(?:/[^/]+)?$");
     private static final Pattern LESSON_PATH =
             Pattern.compile("^/api/v1/lessons/[^/]+$");
+    private static final Pattern LESSON_QUIZ_PATH =
+            Pattern.compile("^/api/v1/lessons/[^/]+/quiz$");
 
     @Override
     public boolean matches(HttpServletRequest request) {
@@ -25,6 +27,7 @@ public class PublicCourseGetRequestMatcher implements RequestMatcher {
             path = path.substring(contextPath.length());
         }
         return COURSE_PATH.matcher(path).matches()
-                || LESSON_PATH.matcher(path).matches();
+                || LESSON_PATH.matcher(path).matches()
+                || LESSON_QUIZ_PATH.matcher(path).matches();
     }
 }

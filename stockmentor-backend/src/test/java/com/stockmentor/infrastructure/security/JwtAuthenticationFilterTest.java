@@ -210,7 +210,8 @@ class JwtAuthenticationFilterTest {
     @ValueSource(strings = {
         "/api/v1/courses",
         "/api/v1/courses/7",
-        "/api/v1/lessons/101"
+        "/api/v1/lessons/101",
+        "/api/v1/lessons/101/quiz"
     })
     void publicCourseGetDoesNotParseAnInvalidOrExpiredBearerToken(String path)
             throws Exception {

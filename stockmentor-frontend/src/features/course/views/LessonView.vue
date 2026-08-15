@@ -145,6 +145,10 @@ watch(
           </header>
 
           <MarkdownContent :content="lesson.contentMd" />
+
+          <RouterLink class="quiz-entry" :to="`/lessons/${lesson.id}/quiz`">
+            课后测验
+          </RouterLink>
         </article>
 
         <section class="completion-card" aria-labelledby="completion-title">
@@ -268,6 +272,12 @@ watch(
 
 .markdown-content {
   margin-top: 1.5rem;
+}
+
+.quiz-entry {
+  display: inline-flex;
+  margin-top: 1.5rem;
+  font-weight: 700;
 }
 
 .completion-card {

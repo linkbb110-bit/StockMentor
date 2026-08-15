@@ -1,6 +1,6 @@
 # StockMentor
 
-StockMentor 是一个面向投资初学者的股票与投资学习系统，同时作为 Java 后端实习项目使用。V0.3 课程与学习进度已完成实现，并于 2026-08-13 完成阶段验证。
+StockMentor 是一个面向投资初学者的股票与投资学习系统，同时作为 Java 后端实习项目使用。V0.4 题库与错题已完成实现，当前提供从课程阅读、课后测验到错题复习的完整学习闭环。
 
 ## 产品边界
 
@@ -86,7 +86,7 @@ Set-Location stockmentor-frontend
 & npm.cmd run dev
 ```
 
-前端开发服务器默认由 Vite 提供。认证页为 `/register` 和 `/login`，公开课程页为 `/courses`、`/courses/:courseId` 和 `/lessons/:lessonId`，受保护页为 `/dashboard` 和 `/profile`。Token 与当前用户仅保存在当前浏览器会话的 `sessionStorage`；退出时本地清理，不调用后端黑名单或退出接口。可通过本地环境变量设置 API 基础地址，但不要提交真实本地 `.env`。
+前端开发服务器默认由 Vite 提供。认证页为 `/register` 和 `/login`；公开学习页为 `/courses`、`/courses/:courseId`、`/lessons/:lessonId` 和 `/lessons/:lessonId/quiz`；受保护页为 `/dashboard`、`/profile` 和 `/wrong-questions`。Token 与当前用户仅保存在当前浏览器会话的 `sessionStorage`；退出时本地清理，不调用后端黑名单或退出接口。可通过本地环境变量设置 API 基础地址，但不要提交真实本地 `.env`。
 
 ## V0.2 已实现范围
 
@@ -125,9 +125,32 @@ PUT /api/v1/me/lessons/{lessonId}/completion
 GET /api/v1/me/courses/{courseId}/progress
 ```
 
-题库、错题、AI 导师、公司分析、虚拟组合和后续聚合仪表盘等 V0.4+ 模块均未提前实现。
+## V0.4 已实现范围
 
-## 最终验证
+- Flyway V4 为现有 20 个 Lesson 各初始化 1 个 Quiz，共 20 个 Quiz、40 道原创客观题，并以标准化表结构保存题目、选项、Attempt、答案选择和错题状态。
+- 支持 `SINGLE_CHOICE`、`MULTIPLE_CHOICE` 和 `TRUE_FALSE`；完整 Quiz 由后端执行选择基数、归属和 exact-set 校验及自动评分，前端不计算正确性或分数。
+- 匿名用户可读取已发布 Quiz，公开响应不包含正确答案或解析；提交、错题列表和错题复习均为当前登录用户的私有接口。
+- 每次合法提交创建新的 transactional Quiz Attempt；允许 repeat quiz attempts，任一步持久化失败时 Attempt、Answer、AnswerOption 和错题状态整体回滚。
+- 答错题目进入 `PENDING`，复习答对后转为 `MASTERED`；再次答错可回到 `PENDING`，错误次数和复习时间由后端状态机维护。
+- 所有 Attempt 和错题查询、修改均按认证 userId 隔离；客户端不能指定其他 userId。
+- Vue 提供课后 Quiz、三种题型作答、后端结果与解析、错题本 PENDING/MASTERED 切换和复习体验；路由切换与异步请求均防止旧响应覆盖新页面。
+
+V0.4 提供以下题库与错题接口：
+
+```text
+GET  /api/v1/lessons/{lessonId}/quiz
+POST /api/v1/me/quizzes/{quizId}/attempts
+GET  /api/v1/me/wrong-questions
+POST /api/v1/me/wrong-questions/{questionId}/answer
+```
+
+V0.5 AI Mock、Attempt History、题库 CMS、公司分析、虚拟组合和后续聚合 Dashboard 仍未实现。
+
+## V0.4 验证
+
+2026-08-14 使用 Temurin Java 17、Node 24 和隔离 MySQL 8.4.7 完成 Task 4 初始集成验证：后端 284/284 测试及 package 通过；前端 18 个测试文件、115/115 测试、type-check 和 build 通过；空库 Flyway V1→V4 成功，并实查 1 Course / 10 Chapter / 20 Lesson / 20 Quiz / 40 Question。真实 HTTP 与内置浏览器验证了匿名读取、无效/过期 Token 行为、后端评分、重复 Attempt、事务回滚、错题状态恢复、用户隔离和未发布资源隔离。Whole-branch review 后的 fresh verification 结果记录在 V0.4 changelog。
+
+## V0.3 基线验证
 
 2026-08-13 使用上述工具链实际完成：
 
@@ -154,7 +177,10 @@ Flyway 已在全新、隔离的 MySQL 8.4.7 空数据库上依次应用 V1、V2�
 - [V0.2 实施计划](docs/superpowers/plans/2026-07-26-stockmentor-v0.2-authentication.md)
 - [V0.3 课程与学习进度设计](docs/superpowers/specs/2026-08-09-stockmentor-v0.3-course-progress-design.md)
 - [V0.3 实施计划](docs/superpowers/plans/2026-08-10-stockmentor-v0.3-course-progress.md)
+- [V0.4 题库与错题设计](docs/superpowers/specs/2026-08-14-stockmentor-v0.4-quiz-wrong-questions-design.md)
+- [V0.4 实施计划](docs/superpowers/plans/2026-08-14-stockmentor-v0.4-quiz-wrong-questions.md)
 - [Definition of Done](docs/06-development/definition-of-done.md)
 - [V0.2 检查表](docs/06-development/phase-checklists/v0.2-authentication.md)
 - [V0.2 最终变更记录](docs/changelog/2026-08-08-v0.2-authentication.md)
 - [V0.3 变更记录](docs/changelog/2026-08-13-v0.3-course-progress.md)
+- [V0.4 变更记录](docs/changelog/2026-08-14-v0.4-quiz-wrong-questions.md)

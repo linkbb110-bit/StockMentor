@@ -21,6 +21,15 @@ import com.stockmentor.course.mapper.LessonMapper;
 import com.stockmentor.course.service.CourseQueryService;
 import com.stockmentor.course.service.LearningProgressService;
 import com.stockmentor.course.vo.LessonCompletionResponse;
+import com.stockmentor.quiz.mapper.QuestionMapper;
+import com.stockmentor.quiz.mapper.QuestionOptionMapper;
+import com.stockmentor.quiz.mapper.QuizAnswerMapper;
+import com.stockmentor.quiz.mapper.QuizAnswerOptionMapper;
+import com.stockmentor.quiz.mapper.QuizAttemptMapper;
+import com.stockmentor.quiz.mapper.QuizMapper;
+import com.stockmentor.quiz.mapper.QuizQuestionMapper;
+import com.stockmentor.quiz.mapper.WrongQuestionMapper;
+import com.stockmentor.quiz.service.QuizQueryService;
 import com.stockmentor.user.domain.UserRole;
 import com.stockmentor.user.domain.UserStatus;
 import com.stockmentor.user.entity.UserEntity;
@@ -99,10 +108,37 @@ class SecurityConfigTest {
     private LearningProgressMapper learningProgressMapper;
 
     @MockitoBean
+    private QuestionMapper questionMapper;
+
+    @MockitoBean
+    private QuestionOptionMapper questionOptionMapper;
+
+    @MockitoBean
+    private QuizMapper quizMapper;
+
+    @MockitoBean
+    private QuizQuestionMapper quizQuestionMapper;
+
+    @MockitoBean
+    private QuizAttemptMapper quizAttemptMapper;
+
+    @MockitoBean
+    private QuizAnswerMapper quizAnswerMapper;
+
+    @MockitoBean
+    private QuizAnswerOptionMapper quizAnswerOptionMapper;
+
+    @MockitoBean
+    private WrongQuestionMapper wrongQuestionMapper;
+
+    @MockitoBean
     private CourseQueryService courseQueryService;
 
     @MockitoBean
     private LearningProgressService learningProgressService;
+
+    @MockitoBean
+    private QuizQueryService quizQueryService;
 
     @Autowired
     private MockMvc mockMvc;
@@ -248,7 +284,8 @@ class SecurityConfigTest {
     @ValueSource(strings = {
         "/api/v1/courses",
         "/api/v1/courses/7",
-        "/api/v1/lessons/101"
+        "/api/v1/lessons/101",
+        "/api/v1/lessons/101/quiz"
     })
     void publicCourseGetsAreAvailableWithoutAuthentication(String path) throws Exception {
         mockMvc.perform(get(path))
@@ -292,6 +329,62 @@ class SecurityConfigTest {
     void privateCompletionWithoutTokenReturnsUnifiedAuthenticationFailure()
             throws Exception {
         mockMvc.perform(put("/api/v1/me/lessons/101/completion"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().json(
+                        AUTHENTICATION_FAILURE_JSON,
+                        JsonCompareMode.STRICT
+                ));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+        "/api/v1/me/quizzes/7/attempts",
+        "/api/v1/me/wrong-questions/31/answer"
+    })
+    void privateQuizPostsWithoutTokenReturnUnifiedAuthenticationFailure(String path)
+            throws Exception {
+        mockMvc.perform(post(path)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().json(
+                        AUTHENTICATION_FAILURE_JSON,
+                        JsonCompareMode.STRICT
+                ));
+    }
+
+    @Test
+    void privateWrongQuestionListWithoutTokenReturnsUnifiedAuthenticationFailure()
+            throws Exception {
+        mockMvc.perform(get("/api/v1/me/wrong-questions"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().json(
+                        AUTHENTICATION_FAILURE_JSON,
+                        JsonCompareMode.STRICT
+                ));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+        "/api/v1/me/quizzes/7/attempts",
+        "/api/v1/me/wrong-questions/31/answer"
+    })
+    void invalidBearerStillFailsOnPrivateQuizPosts(String path) throws Exception {
+        mockMvc.perform(post(path)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer invalid-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().json(
+                        AUTHENTICATION_FAILURE_JSON,
+                        JsonCompareMode.STRICT
+                ));
+    }
+
+    @Test
+    void invalidBearerStillFailsOnPrivateWrongQuestionList() throws Exception {
+        mockMvc.perform(get("/api/v1/me/wrong-questions")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer invalid-token"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(content().json(
                         AUTHENTICATION_FAILURE_JSON,

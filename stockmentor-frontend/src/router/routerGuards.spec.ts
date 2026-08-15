@@ -37,6 +37,8 @@ describe('authentication routes', () => {
     expect(routes.get('/courses')?.meta.requiresAuth).not.toBe(true)
     expect(routes.get('/courses/:courseId')?.meta.requiresAuth).not.toBe(true)
     expect(routes.get('/lessons/:lessonId')?.meta.requiresAuth).not.toBe(true)
+    expect(routes.get('/lessons/:lessonId/quiz')?.meta.requiresAuth).not.toBe(true)
+    expect(routes.get('/wrong-questions')?.meta).toMatchObject({ requiresAuth: true })
   })
 })
 
@@ -107,5 +109,24 @@ describe('authentication route guard', () => {
 
     await expect(guard({ path: '/courses/7', meta: {} })).resolves.toBeUndefined()
     expect(store.restoreSession).toHaveBeenCalledOnce()
+  })
+
+  it('keeps a public Quiz route available but protects wrong questions', async () => {
+    const publicGuard = createAuthenticationGuard(() => store)
+    await expect(publicGuard({ path: '/lessons/101/quiz', meta: {} })).resolves.toBeUndefined()
+
+    const privateGuard = createAuthenticationGuard(() => store)
+    await expect(
+      privateGuard({ path: '/wrong-questions', meta: { requiresAuth: true } }),
+    ).resolves.toEqual({ path: '/login' })
+  })
+
+  it('allows an authenticated user to open wrong questions', async () => {
+    store.isAuthenticated = true
+    const guard = createAuthenticationGuard(() => store)
+
+    await expect(
+      guard({ path: '/wrong-questions', meta: { requiresAuth: true } }),
+    ).resolves.toBeUndefined()
   })
 })

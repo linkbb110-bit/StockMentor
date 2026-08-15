@@ -16,7 +16,8 @@ class PublicCourseGetRequestMatcherTest {
     @ValueSource(strings = {
         "/api/v1/courses",
         "/api/v1/courses/7",
-        "/api/v1/lessons/101"
+        "/api/v1/lessons/101",
+        "/api/v1/lessons/101/quiz"
     })
     void matchesOnlyTheApprovedPublicGetShapes(String path) {
         assertThat(matcher.matches(request("GET", path))).isTrue();
@@ -28,6 +29,11 @@ class PublicCourseGetRequestMatcherTest {
         "PUT,/api/v1/courses/7",
         "GET,/api/v1/courses/7/chapters",
         "GET,/api/v1/lessons/101/completion",
+        "POST,/api/v1/lessons/101/quiz",
+        "GET,/api/v1/lessons/101/quiz/results",
+        "POST,/api/v1/me/quizzes/7/attempts",
+        "GET,/api/v1/me/wrong-questions",
+        "POST,/api/v1/me/wrong-questions/31/answer",
         "GET,/api/v1/me/courses/7/progress",
         "GET,/api/v1/users/me",
         "GET,/api/v1/system/health"
